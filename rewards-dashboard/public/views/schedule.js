@@ -1,16 +1,16 @@
 import * as U from "../util.js";
 
 const PRESETS = [
-  ["Daily at 09:00", "0 9 * * *"],
-  ["Twice daily (09:00, 21:00)", "0 9,21 * * *"],
-  ["Every 6 hours", "0 */6 * * *"],
-  ["Every 12 hours", "0 */12 * * *"],
-  ["Weekdays at 08:00", "0 8 * * 1-5"],
+  ["每天 09:00", "0 9 * * *"],
+  ["每天两次（09:00、21:00）", "0 9,21 * * *"],
+  ["每 6 小时", "0 */6 * * *"],
+  ["每 12 小时", "0 */12 * * *"],
+  ["工作日 08:00", "0 8 * * 1-5"],
 ];
 
 const TARGET_LABEL = {
-  local: "This dashboard",
-  remote: "Bot container (Docker cron)",
+  local: "本面板",
+  remote: "bot 容器（Docker cron）",
 };
 
 let rootEl = null;
@@ -105,8 +105,8 @@ function paint() {
   U.$("#schedNext", rootEl).textContent = current.enabled
     ? current.nextRunAt
       ? `${U.fmtDateTime(current.nextRunAt)} (${U.fmtRelative(current.nextRunAt)})`
-      : "Not scheduled"
-    : "Disabled";
+      : "未安排调度"
+    : "已禁用";
 
   if (target === "local") {
     U.$("#schedLast", rootEl).textContent = current.lastTriggeredAt
@@ -122,7 +122,7 @@ function paint() {
   const excluded = current.excludedAccountIndexes || [];
   U.$("#schedExcluded", rootEl).textContent = excluded.length
     ? excluded.map((index) => `ACCOUNT_${index}`).join(", ")
-    : "None";
+    : "无";
 
   const tzLabel = U.$("#schedTz", rootEl);
   if (target === "local") {
@@ -147,7 +147,7 @@ function renderAccountExclusions() {
   if (!host) return;
   if (!accountOptions.length) {
     host.innerHTML =
-      '<p class="empty-note">No configured accounts are available.</p>';
+      '<p class="empty-note">没有可用的已配置账号。</p>';
     return;
   }
   const excluded = new Set(current?.excludedAccountIndexes || []);
@@ -155,7 +155,7 @@ function renderAccountExclusions() {
     .map(
       (account) => `<label class="check check--row">
                 <input type="checkbox" data-exclude-account="${account.index}" ${excluded.has(account.index) ? "checked" : ""}>
-                <span>Exclude <strong>ACCOUNT_${account.index}</strong> \u2014 ${U.escapeHtml(account.email)}</span>
+                <span>排除 <strong>ACCOUNT_${account.index}</strong> \u2014 ${U.escapeHtml(account.email)}</span>
             </label>`,
     )
     .join("");
@@ -167,7 +167,7 @@ function renderAccountExclusions() {
 async function describe(expr) {
   const out = U.$("#schedDesc", rootEl);
   if (!expr) {
-    out.textContent = "Enter a 5-field cron expression.";
+    out.textContent = "请输入 5 段 cron 表达式。";
     out.className = "sched-desc";
     return;
   }
@@ -185,7 +185,7 @@ async function describe(expr) {
 
 export default {
   id: "schedule",
-  label: "Schedule",
+  label: "调度",
   interval: 30000,
 
   mount(root, ctx) {
@@ -193,11 +193,11 @@ export default {
     root.innerHTML = `
             <section class="panel" aria-labelledby="sched-heading">
                 <div class="panel-head">
-                    <h2 id="sched-heading">Automatic runs</h2>
+                    <h2 id="sched-heading">自动运行</h2>
                     <span class="panel-sub">Two schedulers are available &mdash; pick the one that fits your setup</span>
                 </div>
 
-                <div class="seg" id="schedTargetToggle" role="radiogroup" aria-label="Scheduler location">
+                <div class="seg" id="schedTargetToggle" role="radiogroup" aria-label="调度器位置">
                     <button type="button" class="seg-btn seg-btn--active" id="schedTargetLocal" data-target="local" aria-pressed="true">${U.escapeHtml(TARGET_LABEL.local)}</button>
                     <button type="button" class="seg-btn" id="schedTargetRemote" data-target="remote" aria-pressed="false" hidden>${U.escapeHtml(TARGET_LABEL.remote)}</button>
                 </div>
@@ -209,34 +209,34 @@ export default {
                 <div class="form" id="schedFormBody">
                     <label class="check check--row">
                         <input type="checkbox" id="schedEnabled">
-                        <span><strong>Enabled</strong> &mdash; fire runs on the schedule below</span>
+                        <span><strong>已启用</strong> &mdash; fire runs on the schedule below</span>
                     </label>
 
                     <div id="schedMisfireGroup">
                         <label class="field">
-                            <span>If a run was missed while the dashboard was offline</span>
+                            <span>面板离线期间若有漏跑的运行</span>
                             <select id="schedMisfire" class="input">
-                                <option value="skip">Skip it</option>
-                                <option value="run-on-startup">Run once after startup</option>
-                                <option value="grace-period">Run only within a grace period</option>
+                                <option value="skip">跳过它</option>
+                                <option value="run-on-startup">启动后运行一次</option>
+                                <option value="grace-period">仅在宽限期内运行</option>
                             </select>
                         </label>
 
                         <label class="field" id="schedGraceField" hidden>
-                            <span>Grace period in minutes</span>
+                            <span>宽限期（分钟）</span>
                             <input id="schedGrace" class="input" type="number" min="1" max="1440" value="60">
                         </label>
                     </div>
 
                     <fieldset class="field">
-                        <legend>Excluded accounts</legend>
+                        <legend>排除的账号</legend>
                         <div id="schedAccounts" class="schedule-account-list">
-                            <p class="empty-note">Loading configured accounts&hellip;</p>
+                            <p class="empty-note">正在加载已配置账号&hellip;</p>
                         </div>
                     </fieldset>
 
                     <label class="field">
-                        <span>Cron expression</span>
+                        <span>Cron 表达式</span>
                         <input id="schedCron" class="input input--mono" type="text" placeholder="0 9 * * *"
                                spellcheck="false" autocomplete="off" aria-describedby="schedDesc">
                     </label>
@@ -251,12 +251,12 @@ export default {
 
                     <label class="check check--row">
                         <input type="checkbox" id="schedSkip">
-                        <span><strong>Skip if already running</strong> &mdash; don&rsquo;t start a second run on top of one in progress</span>
+                        <span><strong>若已在运行则跳过</strong> &mdash; don&rsquo;t start a second run on top of one in progress</span>
                     </label>
 
                     <div class="form-actions">
-                        <button type="button" id="schedSave" class="btn btn-primary" disabled>Save schedule</button>
-                        <button type="button" id="schedReset" class="btn">Discard changes</button>
+                        <button type="button" id="schedSave" class="btn btn-primary" disabled>保存调度</button>
+                        <button type="button" id="schedReset" class="btn">放弃修改</button>
                     </div>
                 </div>
                 <p class="empty-note" id="schedUnavailable" hidden>
@@ -267,13 +267,13 @@ export default {
             </section>
 
             <section class="panel" aria-labelledby="sched-state-heading">
-                <div class="panel-head"><h2 id="sched-state-heading">Current state</h2></div>
+                <div class="panel-head"><h2 id="sched-state-heading">当前状态</h2></div>
                 <dl class="kv">
-                    <div><dt>Next run</dt><dd id="schedNext">\u2013</dd></div>
-                    <div><dt>Last triggered</dt><dd id="schedLast">\u2013</dd></div>
-                    <div><dt>Last result</dt><dd id="schedResult">\u2013</dd></div>
-                    <div><dt>Excluded accounts</dt><dd id="schedExcluded">\u2013</dd></div>
-                    <div><dt>Timezone</dt><dd id="schedTz">\u2013</dd></div>
+                    <div><dt>下次运行</dt><dd id="schedNext">\u2013</dd></div>
+                    <div><dt>上次触发</dt><dd id="schedLast">\u2013</dd></div>
+                    <div><dt>上次结果</dt><dd id="schedResult">\u2013</dd></div>
+                    <div><dt>排除的账号</dt><dd id="schedExcluded">\u2013</dd></div>
+                    <div><dt>时区</dt><dd id="schedTz">\u2013</dd></div>
                 </dl>
                 <p class="hint">Times are evaluated in the scheduler&rsquo;s own timezone (dashboard: its <code>TZ</code>;
                 bot container: its own <code>TZ</code>). If a scheduler's host was offline, the local scheduler applies

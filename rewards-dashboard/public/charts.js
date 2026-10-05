@@ -42,7 +42,7 @@ function emptyState(container, message) {
 export function lineChart(
   container,
   points,
-  { emptyMessage = "No data yet." } = {},
+  { emptyMessage = "暂无数据。" } = {},
 ) {
   if (!points || points.length === 0)
     return emptyState(container, emptyMessage);
@@ -92,7 +92,7 @@ export function lineChart(
 
   container.innerHTML = `
         <svg class="chart" viewBox="0 0 ${width} ${height}" width="100%" height="${height}" role="img"
-             aria-label="Point total over time">
+             aria-label="积分总额走势">
             ${grid}
             <path class="chart-area" d="${area}" />
             <path class="chart-line" d="${line}" />
@@ -108,7 +108,7 @@ export function lineChart(
 export function barChart(
   container,
   bars,
-  { emptyMessage = "No runs recorded yet." } = {},
+  { emptyMessage = "暂无运行记录。" } = {},
 ) {
   if (!bars || bars.length === 0) return emptyState(container, emptyMessage);
 
@@ -143,7 +143,7 @@ export function barChart(
 
   container.innerHTML = `
         <svg class="chart" viewBox="0 0 ${width} ${height}" width="100%" height="${height}" role="img"
-             aria-label="Points collected per day">
+             aria-label="每日获得积分">
             ${grid}
             <line class="chart-grid chart-baseline" x1="${PAD.left}" y1="${baseY}" x2="${width - PAD.right}" y2="${baseY}" />
             ${rects}

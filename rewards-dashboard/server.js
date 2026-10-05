@@ -671,6 +671,12 @@ async function handleApi(req, res, url) {
     }
   }
 
+  // 部署侧扩展：添加账号（转发到 bot 的 POST /accounts）
+  if (pathname === "/api/accounts/add" && method === "POST") {
+    const body = await readJsonBody(req);
+    return forward(res, "POST", "/accounts", body);
+  }
+
   // sessions
   if (pathname === "/api/sessions" && method === "GET") {
     return forward(res, "GET", "/sessions");

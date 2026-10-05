@@ -1,5 +1,5 @@
 {
-  "name": "Microsoft Rewards Dashboard",
+  "name": "Microsoft Rewards 面板",
   "short_name": "Rewards Dashboard",
   "description": "Companion dashboard for Microsoft Rewards Script logs and progress tracking.",
   "start_url": ".",

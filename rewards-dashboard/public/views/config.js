@@ -13,95 +13,95 @@ const isPlainObject = (v) =>
 
 // Human-readable name + description for every known boolean config path,
 // grouped for display. Descriptions are copied verbatim from the README's
-// "Configuration Options" tables (same wording, so the two stay in sync).
+// "配置项" tables (same wording, so the two stay in sync).
 // Labels are ours (the README doesn't provide separate display names) - a
 // few README descriptions just restate the setting name (e.g. "Claim bonus
-// points" / "Proxy query engine requests"), so label and description read
+// points" / "代理查询引擎请求"), so label and description read
 // the same for those; that's expected, not a bug. Anything present in
 // config.json but not listed here at all (e.g. a brand-new option from an
 // update the dashboard hasn't caught up with yet) still renders - just with
 // a name derived from its path and no description - under a trailing
-// "Other settings" group, so the toggle grid never silently drops a real
+// "其他设置" group, so the toggle grid never silently drops a real
 // setting.
 const TOGGLE_GROUPS = [
   {
-    title: "Core",
+    title: "核心",
     fields: {
       headless: {
-        label: "Headless browser",
-        desc: "Run browser invisibly",
+        label: "无头浏览器",
+        desc: "以不可见方式运行浏览器",
       },
       errorDiagnostics: {
-        label: "Error diagnostics",
+        label: "错误诊断",
         desc: "Save error and unknown-login page diagnostics under diagnostics/",
       },
       ensureStreakProtection: {
-        label: "Ensure streak protection",
-        desc: "Ensure streak protection is enabled",
+        label: "确保连击保护",
+        desc: "确保已开启连击保护",
       },
       autoClaimPunchcardRewards: {
-        label: "Auto-claim punchcard rewards",
-        desc: "Auto-claim completed punchcard rewards",
+        label: "自动领取打卡奖励",
+        desc: "自动领取已完成的打卡奖励",
       },
       skipNonPointTasks: {
-        label: "Skip non-point tasks",
-        desc: "Skip tasks that award no points",
+        label: "跳过无积分任务",
+        desc: "跳过不发积分的任务",
       },
       searchOnBingLocalQueries: {
-        label: "Local queries for ExploreOnBing",
-        desc: "Use the local query list for ExploreOnBing",
+        label: "ExploreOnBing 用本地词库",
+        desc: "ExploreOnBing 使用本地词库",
       },
     },
   },
   {
-    title: "Workers",
+    title: "任务开关",
     fields: {
       "workers.doDailySet": {
-        label: "Daily set",
-        desc: "Complete daily set",
+        label: "每日任务集",
+        desc: "完成每日任务集",
       },
       "workers.doClaimBonusPoints": {
-        label: "Claim bonus points",
-        desc: "Claim bonus points",
+        label: "领取奖励积分",
+        desc: "领取奖励积分",
       },
       "workers.doMorePromotions": {
-        label: "More activities",
+        label: "更多活动",
         desc: 'Complete "more activities"',
       },
       "workers.doPunchCards": {
-        label: "Punch cards",
-        desc: "Complete punchcards",
+        label: "打卡活动",
+        desc: "完成打卡活动",
       },
       "workers.doAppPromotions": {
-        label: "App promotions",
-        desc: "Complete app promotions",
+        label: "App 推广活动",
+        desc: "完成 App 推广活动",
       },
       "workers.doDesktopSearch": {
-        label: "Desktop search",
+        label: "桌面端搜索",
         desc: "Perform desktop searches",
       },
       "workers.doMobileSearch": {
-        label: "Mobile search",
+        label: "移动端搜索",
         desc: "Perform mobile searches",
       },
       "workers.doBonusSearches": {
-        label: "Bonus searches",
-        desc: "Farm bonus searches beyond the cap",
+        label: "加成搜索（超上限）",
+        desc: "超出上限继续刷加成搜索",
       },
       "workers.doDailyCheckIn": {
-        label: "Daily check-in",
-        desc: "Complete daily check-in",
+        label: "每日签到",
+        desc: "完成每日签到",
       },
       "workers.doReadToEarn": {
-        label: "Read to earn",
-        desc: "Complete Read-to-Earn",
+        label: "阅读赚积分",
+        desc: "完成阅读赚积分",
       },
       "workers.doActivateSearchPerk": {
-        label: "Activate search perk",
+        label: "激活搜索加成",
         desc: 'Activate the "search Nx more" perk when present (runs after the daily set)',
       },
       "workers.doVisualSearch": {
-        label: "Visual search",
+        label: "视觉搜索",
         desc: "Activate the visual-search streak and perform visual searches",
       },
     },
@@ -110,45 +110,45 @@ const TOGGLE_GROUPS = [
     title: "Activities",
     fields: {
       "activities.urlReward": {
-        label: "URL reward",
-        desc: "Complete URL reward activities",
+        label: "URL 奖励",
+        desc: "完成 URL 奖励活动",
       },
       "activities.searchOnBing": {
         label: "ExploreOnBing",
-        desc: "Complete ExploreOnBing offers",
+        desc: "完成 ExploreOnBing 优惠",
       },
     },
   },
   {
-    title: "Search settings",
+    title: "搜索设置",
     fields: {
       "searchSettings.scrollRandomResults": {
-        label: "Scroll random results",
-        desc: "Scroll randomly on results",
+        label: "随机滚动搜索结果",
+        desc: "在结果页随机滚动",
       },
       "searchSettings.clickRandomResults": {
-        label: "Click random results",
-        desc: "Click random links",
+        label: "随机点击搜索结果",
+        desc: "随机点击链接",
       },
       "searchSettings.runOnZeroPoints": {
-        label: "Run on zero points",
-        desc: "Run searches even when no search points remain",
+        label: "积分为 0 时仍运行",
+        desc: "搜索积分已满仍继续搜索",
       },
       "searchSettings.parallelSearching": {
-        label: "Parallel searching",
-        desc: "Run searches in parallel",
+        label: "并行搜索",
+        desc: "并行执行搜索",
       },
       "searchSettings.clusterSearch": {
-        label: "Cluster search",
-        desc: "Cluster each main topic with Bing suggestions",
+        label: "集群搜索",
+        desc: "将每个主话题与 Bing 联想词聚类",
       },
     },
   },
   {
-    title: "Experimental",
+    title: "实验性",
     fields: {
       "experimental.apiSearch": {
-        label: "API search",
+        label: "API 搜索",
         desc: "Perform Bing searches over HTTP instead of driving a browser page",
       },
       "experimental.apiSearchOnBing": {
@@ -156,11 +156,11 @@ const TOGGLE_GROUPS = [
         desc: "Complete ExploreOnBing offers over HTTP instead of the browser",
       },
       "experimental.blockMedia": {
-        label: "Block media",
+        label: "屏蔽媒体请求",
         desc: "Block browser image and media requests to reduce traffic",
       },
       "experimental.edgeBrowsing": {
-        label: "Edge browsing",
+        label: "Edge 浏览连击",
         desc: "Report the 30-minute Edge browsing activity as a background HTTP task",
       },
     },
@@ -169,46 +169,46 @@ const TOGGLE_GROUPS = [
     title: "Logging",
     fields: {
       debugLogs: {
-        label: "Debug logs",
-        desc: "Enable debug logging",
+        label: "调试日志",
+        desc: "启用调试日志",
       },
       "consoleLogFilter.enabled": {
-        label: "Console log filter",
-        desc: "Enable console log filtering",
+        label: "控制台日志过滤",
+        desc: "启用控制台日志过滤",
       },
     },
   },
   {
-    title: "Proxy",
+    title: "代理",
     fields: {
       "proxy.queryEngine": {
-        label: "Proxy query engine requests",
-        desc: "Proxy query engine requests",
+        label: "代理查询引擎请求",
+        desc: "代理查询引擎请求",
       },
       "proxy.ignoreCertificateErrors": {
-        label: "Ignore certificate errors",
+        label: "忽略证书错误",
         desc: "Disable browser TLS certificate verification for intercept proxies",
       },
     },
   },
   {
-    title: "Webhooks",
+    title: "Webhook 通知",
     fields: {
       "webhook.discord.enabled": {
-        label: "Discord webhook",
-        desc: "Enable Discord webhook",
+        label: "Discord Webhook",
+        desc: "启用 Discord Webhook",
       },
       "webhook.telegram.enabled": {
-        label: "Telegram webhook",
-        desc: "Enable Telegram webhook",
+        label: "Telegram Webhook",
+        desc: "启用 Telegram Webhook",
       },
       "webhook.ntfy.enabled": {
-        label: "ntfy webhook",
-        desc: "Enable ntfy notifications",
+        label: "ntfy Webhook",
+        desc: "启用 ntfy 通知",
       },
       "webhook.webhookLogFilter.enabled": {
-        label: "Webhook log filter",
-        desc: "Enable webhook log filtering",
+        label: "Webhook 日志过滤",
+        desc: "启用 Webhook 日志过滤",
       },
     },
   },
@@ -220,7 +220,7 @@ for (const group of TOGGLE_GROUPS) {
     TOGGLE_META[path] = { ...meta, group: group.title };
   }
 }
-const OTHER_GROUP_TITLE = "Other settings";
+const OTHER_GROUP_TITLE = "其他设置";
 const TOGGLE_GROUP_ORDER = [
   ...TOGGLE_GROUPS.map((g) => g.title),
   OTHER_GROUP_TITLE,
@@ -231,6 +231,7 @@ const TOGGLE_GROUP_ORDER = [
 // rather than dropping it or showing the raw dotted path.
 function fallbackLabel(path) {
   const last = path.split(".").pop();
+  if (ZH_KEY[last]) return ZH_KEY[last];
   const spaced = last
     .replace(/^do/, "")
     .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
@@ -239,40 +240,48 @@ function fallbackLabel(path) {
   return spaced.charAt(0).toUpperCase() + spaced.slice(1).toLowerCase();
 }
 
+const ZH_KEY = {
+  contintueOnBotWarning: "检测到 bot 警告时仍继续",
+  prewarmDesktopLogin: "预热桌面端登录",
+  skipWhenCompletedToday: "今日已完成则跳过",
+  ensureStreakProtection: "确保连击保护",
+  autoClaimPunchcardRewards: "自动领取打卡奖励",
+};
+
 // Non-boolean settings a human would actually want a real control for
 // (text/number/select/tag-list), grouped the same way as TOGGLE_GROUPS.
 // Unlike the toggles, this list is NOT auto-discovered from config.json -
 // each field needs a specific input type (a duration string isn't the same
 // UI as a webhook URL isn't the same UI as a keyword list), so it's
 // hand-maintained same as the toggle descriptions. Descriptions are again
-// verbatim from the README's "Configuration Options" tables.
+// verbatim from the README's "配置项" tables.
 const FIELD_GROUPS = [
   {
-    title: "Core",
+    title: "核心",
     fields: {
       sessionPath: {
         kind: "text",
-        label: "Session path",
-        desc: "Directory to store browser sessions",
+        label: "会话存储路径",
+        desc: "浏览器会话存储目录",
         placeholder: "sessions",
       },
       clusters: {
         kind: "number",
-        label: "Clusters",
-        desc: "Number of concurrent account clusters",
+        label: "并发集群数",
+        desc: "并发账号集群数",
         min: 0,
         step: 1,
         placeholder: "1",
       },
       globalTimeout: {
         kind: "text",
-        label: "Global timeout",
-        desc: "Timeout for all actions",
+        label: "全局超时",
+        desc: "所有操作的超时时间",
         placeholder: "30sec",
       },
       accountDelay: {
         kind: "delay",
-        label: "Delay before next account",
+        label: "下一账号启动前延迟",
         min: {
           path: "accountDelay.min",
           desc: "Minimum delay before starting the next configured account",
@@ -287,11 +296,11 @@ const FIELD_GROUPS = [
     },
   },
   {
-    title: "Search settings",
+    title: "搜索设置",
     fields: {
       "searchSettings.maxBonusSearches": {
         kind: "number",
-        label: "Max bonus searches",
+        label: "加成搜索上限",
         desc: "Max bonus searches per run (when Bonus searches is on)",
         min: 0,
         step: 1,
@@ -299,42 +308,42 @@ const FIELD_GROUPS = [
       },
       "searchSettings.searchResultVisitTime": {
         kind: "text",
-        label: "Search result visit time",
-        desc: "Time to spend on each search result",
+        label: "搜索结果停留时长",
+        desc: "每个搜索结果的停留时长",
         placeholder: "10sec",
       },
       "searchSettings.searchDelay": {
         kind: "delay",
-        label: "Delay between searches",
+        label: "搜索间隔",
         min: {
           path: "searchSettings.searchDelay.min",
-          desc: "Minimum delay between searches",
+          desc: "搜索间隔下限",
           placeholder: "30sec",
         },
         max: {
           path: "searchSettings.searchDelay.max",
-          desc: "Maximum delay between searches",
+          desc: "搜索间隔上限",
           placeholder: "1min",
         },
       },
       "searchSettings.readDelay": {
         kind: "delay",
-        label: "Delay for reading",
+        label: "阅读停留时长",
         min: {
           path: "searchSettings.readDelay.min",
-          desc: "Minimum delay for reading",
+          desc: "阅读停留下限",
           placeholder: "30sec",
         },
         max: {
           path: "searchSettings.readDelay.max",
-          desc: "Maximum delay for reading",
+          desc: "阅读停留上限",
           placeholder: "1min",
         },
       },
       "searchSettings.queryEngines": {
         kind: "tags",
-        label: "Query sources",
-        desc: "Sources used to build the search query pool",
+        label: "查询源",
+        desc: "用于构建搜索词库的来源",
         placeholder: "e.g. google, rss.bbc",
         hint: "Valid: google, wikipedia, wikirandom, hackernews, reddit, local, or rss.<source> (e.g. rss.bbc, rss.googleNews).",
       },
@@ -345,120 +354,120 @@ const FIELD_GROUPS = [
     fields: {
       "consoleLogFilter.mode": {
         kind: "select",
-        label: "Console filter mode",
-        desc: "Filter mode (whitelist/blacklist)",
+        label: "控制台过滤模式",
+        desc: "过滤模式（白/黑名单）",
         options: [
-          { value: "whitelist", label: "Whitelist" },
-          { value: "blacklist", label: "Blacklist" },
+          { value: "whitelist", label: "白名单" },
+          { value: "blacklist", label: "黑名单" },
         ],
       },
       "consoleLogFilter.levels": {
         kind: "tags",
-        label: "Console filter levels",
-        desc: "Log levels to filter",
+        label: "控制台过滤级别",
+        desc: "过滤的日志级别",
         placeholder: "e.g. error, warn",
         suggestions: ["error", "warn", "info", "debug"],
       },
       "consoleLogFilter.keywords": {
         kind: "tags",
-        label: "Console filter keywords",
-        desc: "Keywords to filter",
+        label: "控制台过滤关键词",
+        desc: "过滤关键词",
         placeholder: "e.g. starting account",
       },
       "consoleLogFilter.regexPatterns": {
         kind: "tags",
-        label: "Console filter regex patterns",
-        desc: "Regex patterns for filtering",
+        label: "控制台过滤正则",
+        desc: "过滤用的正则",
         placeholder: "e.g. ^Error:",
         mono: true,
       },
     },
   },
   {
-    title: "Webhooks",
+    title: "Webhook 通知",
     fields: {
       "webhook.discord.url": {
         kind: "text",
-        label: "Discord webhook URL",
-        desc: "Discord webhook URL",
+        label: "Discord Webhook 地址",
+        desc: "Discord Webhook 地址",
         placeholder: "https://discord.com/api/webhooks/...",
       },
       "webhook.telegram.botToken": {
         kind: "text",
-        label: "Telegram bot token",
-        desc: "Telegram bot token",
+        label: "Telegram Bot Token",
+        desc: "Telegram Bot Token",
       },
       "webhook.telegram.chatId": {
         kind: "text",
-        label: "Telegram chat ID",
-        desc: "Telegram chat id",
+        label: "Telegram 聊天 ID",
+        desc: "Telegram 聊天 ID",
       },
       "webhook.ntfy.url": {
         kind: "text",
-        label: "ntfy server URL",
-        desc: "ntfy server URL",
+        label: "ntfy 服务地址",
+        desc: "ntfy 服务地址",
       },
       "webhook.ntfy.topic": {
         kind: "text",
-        label: "ntfy topic",
-        desc: "ntfy topic",
+        label: "ntfy 主题",
+        desc: "ntfy 主题",
       },
       "webhook.ntfy.token": {
         kind: "text",
-        label: "ntfy auth token",
+        label: "ntfy 鉴权令牌",
         desc: "ntfy authentication token",
       },
       "webhook.ntfy.title": {
         kind: "text",
-        label: "ntfy notification title",
-        desc: "Notification title",
+        label: "ntfy 通知标题",
+        desc: "通知标题",
         placeholder: "Microsoft-Rewards-Script",
       },
       "webhook.ntfy.tags": {
         kind: "tags",
-        label: "ntfy tags",
-        desc: "Notification tags",
+        label: "ntfy 标签",
+        desc: "通知标签",
         placeholder: "e.g. bot, notify",
       },
       "webhook.ntfy.priority": {
         kind: "select",
-        label: "ntfy priority",
-        desc: "Notification priority (1-5)",
+        label: "ntfy 优先级",
+        desc: "通知优先级（1-5）",
         numeric: true,
         options: [
-          { value: "1", label: "1 \u2013 Min" },
-          { value: "2", label: "2 \u2013 Low" },
-          { value: "3", label: "3 \u2013 Default" },
-          { value: "4", label: "4 \u2013 High" },
-          { value: "5", label: "5 \u2013 Max" },
+          { value: "1", label: "1 \u2013 最低" },
+          { value: "2", label: "2 \u2013 较低" },
+          { value: "3", label: "3 \u2013 默认" },
+          { value: "4", label: "4 \u2013 较高" },
+          { value: "5", label: "5 \u2013 最高" },
         ],
       },
       "webhook.webhookLogFilter.mode": {
         kind: "select",
-        label: "Webhook filter mode",
-        desc: "Filter mode (whitelist/blacklist)",
+        label: "Webhook 过滤模式",
+        desc: "过滤模式（白/黑名单）",
         options: [
-          { value: "whitelist", label: "Whitelist" },
-          { value: "blacklist", label: "Blacklist" },
+          { value: "whitelist", label: "白名单" },
+          { value: "blacklist", label: "黑名单" },
         ],
       },
       "webhook.webhookLogFilter.levels": {
         kind: "tags",
-        label: "Webhook filter levels",
-        desc: "Log levels to send",
+        label: "Webhook 过滤级别",
+        desc: "发送的日志级别",
         placeholder: "e.g. error, warn",
         suggestions: ["error", "warn", "info", "debug"],
       },
       "webhook.webhookLogFilter.keywords": {
         kind: "tags",
-        label: "Webhook filter keywords",
-        desc: "Keywords to filter",
+        label: "Webhook 过滤关键词",
+        desc: "过滤关键词",
         placeholder: "e.g. starting account",
       },
       "webhook.webhookLogFilter.regexPatterns": {
         kind: "tags",
-        label: "Webhook filter regex patterns",
-        desc: "Regex patterns for filtering",
+        label: "Webhook 过滤正则",
+        desc: "过滤用的正则",
         placeholder: "e.g. ^Error:",
         mono: true,
       },
@@ -558,7 +567,7 @@ function localMerge(base, patch) {
 // toggles+fields section plus the raw JSON editor. Used by every control in
 // that section (toggle switches, text/select/tag fields, the recommended-
 // filter tip) - a single rebuild keeps all of it consistent, e.g. flipping
-// "Webhook log filter" on via the tip button correctly checks that same
+// "Webhook 日志过滤" on via the tip button correctly checks that same
 // toggle switch too, since they're now rendered from the same pass.
 function afterSave(patch) {
   loaded = localMerge(loaded, patch);
@@ -597,7 +606,7 @@ function renderSettings() {
   if (!host) return;
 
   // Group booleans in TOGGLE_GROUP_ORDER order; anything unrecognized falls
-  // into a trailing "Other settings" group rather than being dropped.
+  // into a trailing "其他设置" group rather than being dropped.
   const bools = booleanPaths(loaded);
   const togglesByGroup = new Map();
   for (const b of bools) {
@@ -610,7 +619,7 @@ function renderSettings() {
   // fields too (Core/Search settings/Logging/Webhooks are a subset of it),
   // so it's the single source of truth for section order - toggles for a
   // group render first, its detail fields render underneath, in the same
-  // card, so e.g. "Webhook log filter" (the enable toggle) sits directly
+  // card, so e.g. "Webhook 日志过滤" (the enable toggle) sits directly
   // above the filter's mode/levels/keywords fields it controls.
   host.innerHTML = TOGGLE_GROUP_ORDER.filter(
     (title) => togglesByGroup.has(title) || FIELD_GROUPS_BY_TITLE.has(title),
@@ -622,7 +631,7 @@ function renderSettings() {
         <div class="acc-detail-group">
             <h3 class="acc-detail-group-title">${U.escapeHtml(title)}</h3>
             ${toggles.length ? `<div class="switch-grid">${toggles.map(switchHtml).join("")}</div>` : ""}
-            ${title === "Webhooks" ? webhookFilterTipHtml() : ""}
+            ${title === "Webhook 通知" ? webhookFilterTipHtml() : ""}
             ${fields
           ? `<div class="field-grid">${Object.entries(fields)
             .map(([path, def]) => fieldHtml(path, def))
@@ -672,7 +681,7 @@ function textFieldHtml(path, def) {
                 ${locked ? "disabled" : ""}
                 ${def.min != null ? `min="${def.min}"` : ""}
                 ${def.step != null ? `step="${def.step}"` : ""}>
-            ${locked ? '<span class="field-locked">\uD83D\uDD12 Hidden until secrets are revealed</span>' : ""}
+            ${locked ? '<span class="field-locked">\uD83D\uDD12 显示密钥后可见</span>' : ""}
         </label>`;
 }
 
@@ -710,11 +719,11 @@ function tagsFieldHtml(path, def) {
                     </span>`,
       )
       .join("")}
-                ${!items.length ? '<span class="empty-note tag-empty">None set</span>' : ""}
+                ${!items.length ? '<span class="empty-note tag-empty">未设置</span>' : ""}
             </div>
             <div class="tag-add">
                 <input class="input tag-add-input" type="text" placeholder="${U.escapeAttr(def.placeholder || "Add value\u2026")}" ${dlId ? `list="${dlId}"` : ""}>
-                <button type="button" class="btn btn-small tag-add-btn">Add</button>
+                <button type="button" class="btn btn-small tag-add-btn">添加</button>
             </div>
             ${dlId ? `<datalist id="${dlId}">${def.suggestions.map((s) => `<option value="${U.escapeAttr(s)}">`).join("")}</datalist>` : ""}
             ${def.hint ? `<span class="field-hint">${U.escapeHtml(def.hint)}</span>` : ""}
@@ -753,13 +762,13 @@ function fieldHtml(path, def) {
 function webhookFilterTipHtml() {
   return `
         <p class="notice notice--info cfg-tip">
-            Set <strong>Webhook log filter</strong> to <em>on</em> before enabling a push-notification
+            已设置 <strong>Webhook 日志过滤</strong> to <em>on</em> before enabling a push-notification
             webhook like ntfy, or you&rsquo;ll get a notification for every log line, including debug noise.
             With it enabled, only account start, 2FA codes, and account completion summaries are delivered.
             Use whitelist mode and the &ldquo;Webhook filter keywords&rdquo; field below to customize exactly
             which notifications you receive.
             <span class="notice-actions">
-                <button type="button" id="cfgWebhookFilterTipBtn" class="btn btn-primary btn-small">Apply recommended filter</button>
+                <button type="button" id="cfgWebhookFilterTipBtn" class="btn btn-primary btn-small">应用推荐过滤</button>
                 <span class="notice-sub">whitelist &middot; starting account, select number, collected</span>
             </span>
         </p>`;
@@ -781,7 +790,7 @@ function bindFieldEvents(host) {
       }
       const value = isNumber ? Number(next) : next;
       if (isNumber && Number.isNaN(value)) {
-        U.toast("Enter a valid number.", "error");
+        U.toast("请输入有效数字。", "error");
         input.value = original;
         return;
       }
@@ -858,7 +867,7 @@ function bindFieldEvents(host) {
         ? [...getDeep(loaded, path)]
         : [];
       if (items.includes(value)) {
-        U.toast("Already in the list.", "info");
+        U.toast("已在列表中。", "info");
         input.value = "";
         return;
       }
@@ -885,7 +894,7 @@ function bindFieldEvents(host) {
       // save() already explained why
     } finally {
       tipBtn.disabled = false;
-      tipBtn.textContent = "Apply recommended filter";
+      tipBtn.textContent = "应用推荐过滤";
     }
   });
 }
@@ -943,10 +952,10 @@ function renderDrift() {
   el.hidden = false;
   el.className = "notice notice--warn";
   el.innerHTML = `
-    <strong>Config update available</strong> &mdash; ${n} field${n === 1 ? "" : "s"} added in a recent script update:
+    <strong>配置有可更新项</strong> &mdash; ${n} field${n === 1 ? "" : "s"} added in a recent script update:
     <ul>${drift.addedKeys.map((k) => `<li><code>${U.escapeHtml(k)}</code></li>`).join("")}</ul>
     <div class="notice-actions">
-      <button type="button" id="cfgSyncBtn" class="btn btn-primary btn-small">Sync now</button>
+      <button type="button" id="cfgSyncBtn" class="btn btn-primary btn-small">立即同步</button>
       <span class="notice-sub">Adds the missing fields with their defaults. Your existing values are never changed.</span>
     </div>`;
   U.$("#cfgSyncBtn", rootEl).addEventListener("click", doSync);
@@ -962,7 +971,7 @@ async function doSync() {
     U.toast(
       result.patched
         ? `Synced ${result.addedKeys.length} field${result.addedKeys.length === 1 ? "" : "s"}. Applies on the next run.`
-        : "Already up to date.",
+        : "已是最新。",
       "success",
     );
     await loadConfig(U.$("#cfgReveal", rootEl)?.checked || false); // reload config.json (now includes the synced fields) and re-check drift
@@ -970,11 +979,11 @@ async function doSync() {
     const { kind, message } = explainConfigError(e);
     showNotice("cfgNotice", message, kind);
     btn.disabled = false;
-    btn.textContent = "Sync now";
+    btn.textContent = "立即同步";
   }
 }
 
-// Shared by initial load, "Reload from API", the reveal-secrets toggle, and
+// Shared by initial load, "从 API 重新加载", the reveal-secrets toggle, and
 // post-sync reload - one place that fetches config.json + drift status together.
 async function loadConfig(reveal) {
   const res = await api.config(reveal);
@@ -994,7 +1003,7 @@ function paint() {
 
 export default {
   id: "config",
-  label: "Config",
+  label: "配置",
   interval: 0, // never poll: it would stomp on whatever is in the editor
 
   mount(root, ctx) {
@@ -1005,7 +1014,7 @@ export default {
 
             <section class="panel" aria-labelledby="cfg-settings-heading">
                 <div class="panel-head">
-                    <h2 id="cfg-settings-heading">Settings</h2>
+                    <h2 id="cfg-settings-heading">设置</h2>
                     <span class="panel-sub">Saves each change automatically. Applies on the next run.</span>
                 </div>
                 <div class="cfg-toggle-groups" id="cfgSettings"></div>
@@ -1013,11 +1022,11 @@ export default {
 
             <section class="panel" aria-labelledby="cfg-raw-heading">
                 <div class="panel-head">
-                    <h2 id="cfg-raw-heading">Raw config</h2>
-                    <span class="panel-sub">Only the fields you actually change are sent</span>
+                    <h2 id="cfg-raw-heading">原始配置</h2>
+                    <span class="panel-sub">只会提交你实际改动的字段</span>
                     <label class="check">
                         <input type="checkbox" id="cfgReveal">
-                        <span>Reveal secrets</span>
+                        <span>显示密钥</span>
                     </label>
                 </div>
 
@@ -1030,8 +1039,8 @@ export default {
                 <textarea id="cfgEditor" class="editor" spellcheck="false" autocomplete="off" aria-label="config.json"></textarea>
 
                 <div class="form-actions">
-                    <button type="button" id="cfgSave" class="btn btn-primary">Save changes</button>
-                    <button type="button" id="cfgReload" class="btn" title="Discard unsaved edits and re-fetch config.json from the bot.">Reload from API</button>
+                    <button type="button" id="cfgSave" class="btn btn-primary">保存修改</button>
+                    <button type="button" id="cfgReload" class="btn" title="Discard unsaved edits and re-fetch config.json from the bot.">从 API 重新加载</button>
                 </div>
             </section>`;
 
@@ -1066,7 +1075,7 @@ export default {
 
       const patch = deepDiff(loaded, edited);
       if (!Object.keys(patch).length) {
-        U.toast("Nothing changed.", "info");
+        U.toast("没有改动。", "info");
         return;
       }
 

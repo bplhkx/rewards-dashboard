@@ -94,7 +94,7 @@ function setMode(mode, persist) {
   currentMode = mode;
   els.modeIcon.textContent = mode === "dark" ? "\u2600" : "\u263D";
   const label =
-    mode === "dark" ? "Switch to light mode" : "Switch to dark mode";
+    mode === "dark" ? "切换到浅色模式" : "切换到深色模式";
   els.modeToggle.setAttribute("aria-label", label);
   els.modeToggle.title = label;
   if (persist) setStoredMode(mode);
@@ -274,22 +274,22 @@ function renderStatusBadge() {
 
   if (!state.streamOpen && !s) {
     badge.classList.add("status-down");
-    els.statusText.textContent = "Dashboard server unreachable";
+    els.statusText.textContent = "无法连接面板服务";
   } else if (!s) {
     badge.classList.add("status-unknown");
     els.statusText.textContent = "Connecting\u2026";
   } else if (!s.reachable) {
     badge.classList.add("status-down");
-    els.statusText.textContent = "Bot backend offline";
+    els.statusText.textContent = "bot 后端离线";
   } else if (s.authOk === false) {
     badge.classList.add("status-warn");
-    els.statusText.textContent = "Control API token rejected";
+    els.statusText.textContent = "控制 API 令牌被拒绝";
   } else if (s.botRunning) {
     badge.classList.add("status-live");
-    els.statusText.textContent = "Running now";
+    els.statusText.textContent = "正在运行";
   } else {
     badge.classList.add("status-live");
-    els.statusText.textContent = "Connected";
+    els.statusText.textContent = "已连接";
   }
   badge.title = s?.lastError || "";
 }
@@ -304,12 +304,12 @@ function renderFooter() {
 
     footerStatus.textContent =
         !s
-            ? "Connecting…"
+            ? "连接中…"
             : !s.reachable
-                ? "Disconnected"
+                ? "已断开"
                 : s.botRunning
-                    ? "Running"
-                    : "Connected";
+                    ? "运行中"
+                    : "已连接";
 
     footerScriptVersion.textContent =
         `Microsoft Rewards Script:${s?.version || "\u2013"}`;
@@ -346,7 +346,7 @@ function renderControlStrip() {
   }
   U.renderTicker(
     els.ctlDetail,
-    bits.join(" \u00b7 ") || (usable ? "Ready" : "Control API unavailable"),
+    bits.join(" \u00b7 ") || (usable ? "就绪" : "控制 API 不可用"),
   );
 
   els.btnStart.disabled = !usable || running;
@@ -368,10 +368,10 @@ async function control(action, body, { confirm: confirmMsg, success } = {}) {
 
 function initControls() {
   els.btnStart.addEventListener("click", () =>
-    control("start", {}, { success: "Run started." }),
+    control("start", {}, { success: "已开始运行。" }),
   );
   els.btnStop.addEventListener("click", () =>
-    control("stop", { force: false }, { success: "Stop signal sent." }),
+    control("stop", { force: false }, { success: "已发送停止信号。" }),
   );
   els.btnRestart.addEventListener("click", () =>
     control(
@@ -390,7 +390,7 @@ function initControls() {
       { force: true },
       {
         confirm: "Force-kill the run (SIGKILL)? It gets no chance to clean up.",
-        success: "Force stop sent.",
+        success: "已发送强制终止。",
       },
     );
   });
@@ -402,7 +402,7 @@ function initControls() {
       {
         confirm:
           "Shut the control API down? The dashboard will go offline until you start it again on the bot host.",
-        success: "Shutdown sent.",
+        success: "已发送关闭指令。",
       },
     );
   });

@@ -37,13 +37,13 @@ function render() {
 
       const firstLine =
         (entry.error || "").split("\n").find((l) => l.trim()) ||
-        "No error text captured.";
+        "未捕获到错误文本。";
 
       const body = isOpen
         ? `<div class="diag-body">
                     ${entry.hasError
           ? `<pre class="diag-pre">${U.escapeHtml(entry.error || "")}</pre>`
-          : '<p class="empty-note">No error.txt in this capture.</p>'
+          : '<p class="empty-note">本次抓取里没有 error.txt。</p>'
         }
                     ${entry.hasScreenshot
           ? `<a class="diag-shot" href="${U.escapeAttr(diagUrl(entry.name, "screenshot.png"))}" target="_blank" rel="noopener">
@@ -52,7 +52,7 @@ function render() {
           : ""
         }
                     ${entry.hasHtml
-          ? `<p><a class="btn btn-small" href="${U.escapeAttr(diagUrl(entry.name, "dump.html"))}" download>Download dump.html</a></p>`
+          ? `<p><a class="btn btn-small" href="${U.escapeAttr(diagUrl(entry.name, "dump.html"))}" download>下载 dump.html</a></p>`
           : ""
         }
                    </div>`
@@ -112,7 +112,7 @@ function renderSessions() {
   if (!list) return;
 
   if (!accountsPayload || !sessionsPayload) {
-    list.innerHTML = '<p class="empty-note" style="padding:1.25rem">Loading&hellip;</p>';
+    list.innerHTML = '<p class="empty-note" style="padding:1.25rem">加载中&hellip;</p>';
     return;
   }
 
@@ -121,7 +121,7 @@ function renderSessions() {
   );
   if (!accounts.length) {
     list.innerHTML =
-      '<p class="empty-note" style="padding:1.25rem">No configured accounts found.</p>';
+      '<p class="empty-note" style="padding:1.25rem">未找到已配置账号。</p>';
     return;
   }
 
@@ -144,14 +144,14 @@ function renderSessions() {
       );
       const meta = hasSessions
         ? `${sessions.map((s) => U.escapeHtml(s.platform)).join(" \u00b7 ")} \u00b7 updated ${U.escapeHtml(U.fmtRelative(latest))}`
-        : "No stored sessions";
+        : "没有已保存的会话";
 
       const isClearing = clearing.has(a.email);
       const disabled = !hasSessions || running || isClearing;
       const title = running
-        ? "The bot must be idle to clear a session"
+        ? "清除会话需要 bot 处于空闲状态"
         : !hasSessions
-          ? "Nothing stored for this account yet"
+          ? "该账号还没有保存任何内容"
           : "";
 
       return `<div class="session-card">
@@ -161,7 +161,7 @@ function renderSessions() {
                 </div>
                 <button type="button" class="btn btn-danger btn-small" data-clear-session="${U.escapeAttr(a.email)}"
                     ${disabled ? "disabled" : ""} ${title ? `title="${U.escapeAttr(title)}"` : ""}>
-                    ${isClearing ? "Clearing\u2026" : "Clear sessions"}
+                    ${isClearing ? "Clearing\u2026" : "清除会话"}
                 </button>
             </div>`;
     })
@@ -176,7 +176,7 @@ function renderSessions() {
 
 export default {
   id: "diagnostics",
-  label: "Diagnostics",
+  label: "诊断",
   interval: 30000,
 
   mount(root, ctx) {
@@ -185,8 +185,8 @@ export default {
     root.innerHTML = `
             <section class="panel" aria-labelledby="sessions-heading">
                 <div class="panel-head">
-                    <h2 id="sessions-heading">Session management</h2>
-                    <span class="panel-sub">Clearing sessions can fix most common login issues</span>
+                    <h2 id="sessions-heading">会话管理</h2>
+                    <span class="panel-sub">清除会话通常能解决大多数登录问题</span>
                 </div>
                 <p class="notice notice--warn">
                     Clearing a session logs that account out immediately. It will need to sign in again
@@ -194,18 +194,18 @@ export default {
                     actually seeing login problems for that account.
                 </p>
                 <div class="session-card-list" id="sessionCardList">
-                    <p class="empty-note" style="padding:1.25rem">Loading&hellip;</p>
+                    <p class="empty-note" style="padding:1.25rem">加载中&hellip;</p>
                 </div>
             </section>
 
             <section class="panel" aria-labelledby="diag-heading">
                 <div class="panel-head">
-                    <h2 id="diag-heading">Error captures</h2>
+                    <h2 id="diag-heading">错误抓取</h2>
                     <span class="panel-sub" id="diagMeta"></span>
-                    <button type="button" id="diagRefresh" class="btn btn-small">Refresh</button>
+                    <button type="button" id="diagRefresh" class="btn btn-small">刷新</button>
                 </div>
                 <ul class="diag-list" id="diagList">
-                    <li class="empty-note">Loading&hellip;</li>
+                    <li class="empty-note">加载中&hellip;</li>
                 </ul>
             </section>`;
 

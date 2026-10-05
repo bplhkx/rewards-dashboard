@@ -47,19 +47,19 @@ function renderAll() {
   const visible = entries.filter(matches);
   box.innerHTML = visible.length
     ? visible.slice(-MAX_LINES).map(lineHtml).join("")
-    : '<p class="empty-note">No log lines match the current filter.</p>';
+    : '<p class="empty-note">没有日志行匹配当前过滤条件。</p>';
   if (autoscroll) box.scrollTop = box.scrollHeight;
   updateMeta();
 }
 
 function updateMeta() {
   U.$("#logCount", rootEl).textContent =
-    `${entries.length.toLocaleString()} line${entries.length === 1 ? "" : "s"} buffered`;
+    `${entries.length.toLocaleString()} 行已缓冲`;
   const btn = U.$("#logPause", rootEl);
   btn.textContent = paused
     ? pendingWhilePaused
       ? `Resume (${pendingWhilePaused} new)`
-      : "Resume"
+      : "继续滚动"
     : "Pause";
   btn.classList.toggle("btn-primary", paused);
 }
@@ -117,7 +117,7 @@ function download() {
 
 export default {
   id: "logs",
-  label: "Logs",
+  label: "日志",
   interval: 0, // live — nothing to poll
 
   mount(root, ctx) {
@@ -125,36 +125,36 @@ export default {
     root.innerHTML = `
             <section class="panel" aria-labelledby="logs-heading">
                 <div class="panel-head">
-                    <h2 id="logs-heading">Live logs</h2>
-                    <span class="panel-sub" id="logCount">0 lines buffered</span>
+                    <h2 id="logs-heading">实时日志</h2>
+                    <span class="panel-sub" id="logCount">0 行已缓冲</span>
                 </div>
 
                 <div class="toolbar">
                     <label class="field field--inline">
-                        <span>Level</span>
+                        <span>级别</span>
                         <select id="logLevel" class="input">
-                            <option value="all">All</option>
-                            <option value="info">Info and up</option>
-                            <option value="warn">Warnings and up</option>
-                            <option value="error">Errors only</option>
+                            <option value="all">全部</option>
+                            <option value="info">信息及以上</option>
+                            <option value="warn">警告及以上</option>
+                            <option value="error">仅错误</option>
                         </select>
                     </label>
                     <label class="field field--grow">
-                        <span class="visually-hidden">Search</span>
-                        <input id="logSearch" class="input" type="search" placeholder="Filter lines\u2026" autocomplete="off">
+                        <span class="visually-hidden">搜索</span>
+                        <input id="logSearch" class="input" type="search" placeholder="过滤日志\u2026" autocomplete="off">
                     </label>
                     <label class="check">
                         <input type="checkbox" id="logAutoscroll" checked>
-                        <span>Autoscroll</span>
+                        <span>自动滚动</span>
                     </label>
-                    <button type="button" id="logPause" class="btn">Pause</button>
-                    <button type="button" id="logMore" class="btn">Load 2000</button>
-                    <button type="button" id="logDownload" class="btn">Download</button>
-                    <button type="button" id="logClear" class="btn">Clear</button>
+                    <button type="button" id="logPause" class="btn">暂停</button>
+                    <button type="button" id="logMore" class="btn">加载 2000 行</button>
+                    <button type="button" id="logDownload" class="btn">下载</button>
+                    <button type="button" id="logClear" class="btn">清除</button>
                 </div>
 
                 <div class="log-box" id="logBox" tabindex="0" aria-live="off">
-                    <p class="empty-note">Waiting for log lines\u2026</p>
+                    <p class="empty-note">等待日志输出\u2026</p>
                 </div>
             </section>`;
 

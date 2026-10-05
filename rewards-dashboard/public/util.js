@@ -293,17 +293,17 @@ export function debounce(fn, ms = 250) {
 }
 
 const PILLS = {
-  success: ["pill-success", "Success"],
-  done: ["pill-success", "Done"],
-  error: ["pill-error", "Error"],
-  crashed: ["pill-error", "Crashed"],
-  interrupted: ["pill-warn", "Interrupted"],
-  stopped: ["pill-warn", "Stopped"],
-  running: ["pill-running", "Running"],
-  starting: ["pill-running", "Starting"],
-  stopping: ["pill-warn", "Stopping"],
-  pending: ["pill-pending", "Pending"],
-  idle: ["pill-idle", "Idle"],
+  success: ["pill-success", "成功"],
+  done: ["pill-success", "完成"],
+  error: ["pill-error", "错误"],
+  crashed: ["pill-error", "崩溃"],
+  interrupted: ["pill-warn", "被打断"],
+  stopped: ["pill-warn", "已停止"],
+  running: ["pill-running", "运行中"],
+  starting: ["pill-running", "启动中"],
+  stopping: ["pill-warn", "停止中"],
+  pending: ["pill-pending", "等待中"],
+  idle: ["pill-idle", "空闲"],
 };
 
 export function pillParts(status) {

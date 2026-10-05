@@ -1,6 +1,6 @@
 "use strict";
 
-const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const DAY_NAMES = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];
 
 const FIELDS = [
   { min: 0, max: 59 }, // minute
@@ -116,9 +116,9 @@ function nextRun(expr, from = new Date()) {
 
 function to12h(hour, minute) {
   const h = ((hour % 12) + 12) % 12 || 12;
-  const period = hour < 12 ? "AM" : "PM";
+  const period = hour < 12 ? "上午" : "下午";
   const mm = String(minute).padStart(2, "0");
-  return `${h}:${mm} ${period}`;
+  return `${period}${h}:${mm}`;
 }
 
 function parseField(field) {
@@ -144,15 +144,15 @@ function parseField(field) {
 
 function describeWeekdays(field) {
   if (field.any) return null;
-  if (field.every) return `every ${field.every} day(s) of the week`;
+  if (field.every) return `每周每隔 ${field.every} 天`;
   const names = field.values.map((d) => DAY_NAMES[d % 7]);
   const isWeekdays =
     field.values.length === 5 &&
     [1, 2, 3, 4, 5].every((d) => field.values.includes(d));
   const isWeekend =
     field.values.length === 2 && [0, 6].every((d) => field.values.includes(d));
-  if (isWeekdays) return "weekdays";
-  if (isWeekend) return "weekends";
+  if (isWeekdays) return "工作日";
+  if (isWeekend) return "周末";
   return names.join(", ");
 }
 
@@ -171,12 +171,12 @@ function describeCron(expr) {
 
   // Every N minutes, e.g. "*/15 * * * *"
   if (minute.every && hour.any) {
-    return `Every ${minute.every} minute${minute.every === 1 ? "" : "s"}`;
+    return `每 ${minute.every} 分钟`;
   }
 
   // Every N hours, e.g. "0 */6 * * *"
   if (hour.every && minute.values?.length === 1 && minute.values[0] === 0) {
-    return `Every ${hour.every} hour${hour.every === 1 ? "" : "s"}`;
+    return `每 ${hour.every} 小时`;
   }
 
   // Fixed minute, one or more fixed hours — the common case.
@@ -185,8 +185,8 @@ function describeCron(expr) {
     const dayPart = describeWeekdays(dow);
     const timesText = times.length === 1 ? times[0] : joinWithAnd(times);
     return dayPart
-      ? `${capitalize(dayPart)} at ${timesText}`
-      : `Daily at ${timesText}`;
+      ? `${dayPart} ${timesText}`
+      : `每天 ${timesText}`;
   }
 
   return expr; // anything else: don't guess, show the raw expression
@@ -194,8 +194,8 @@ function describeCron(expr) {
 
 function joinWithAnd(items) {
   if (items.length <= 1) return items.join("");
-  if (items.length === 2) return `${items[0]} and ${items[1]}`;
-  return `${items.slice(0, -1).join(", ")}, and ${items[items.length - 1]}`;
+  if (items.length === 2) return `${items[0]} 和 ${items[1]}`;
+  return `${items.join("、")}`;
 }
 
 function capitalize(s) {

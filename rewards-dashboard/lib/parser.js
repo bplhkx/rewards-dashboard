@@ -85,6 +85,58 @@ const WRAPPER_SCRIPT_FAILED_RE = /^ERROR: Script failed(?:\s*\(via API\))?!$/;
 const CLUSTER_WORKER_EXIT_RE =
   /^Worker\s+(\d+)\s+exit\s+\|\s+Code:\s*(-?\d+|n\/a)\s+\|\s+Signal:\s*([^|]+)\s+\|\s+Active workers:\s*(\d+)$/;
 
+// ── 部署侧修正（V4-china 中文日志）────────────────────────────────
+// 本面板所有事件正则都锚定上游英文日志原文，而 chiihero/Microsoft-Rewards-Script
+// 的 V4-china 分支把 Logger 的消息正文翻译成了中文（src/index.ts:285/388/541/553/593/641/677、
+// src/browser/ReactFunc.ts:95、src/browser/auth/methods/PasswordlessLogin.ts:77/102/130/153）。
+// 结果：ACCOUNT-END / RUN-END 等永不匹配 → runs 与 account_history 一直是空表。
+// 这里把中文消息规范化回英文原形，下游逻辑与存储完全不动。
+const ZH_MESSAGE_RULES = [
+  // 运行开始：启动微软奖励脚本 | v4.3.2.4 | 账户数: 1 | 集群数: 1
+  [/^启动微软奖励脚本/, "Starting Microsoft Rewards Script"],
+  [/账户数:\s*/g, "Accounts: "],
+  [/集群数:\s*/g, "Clusters: "],
+  // 运行结束：全部账户完成 | 处理账户数=1 | 获得积分=30 | 原余额=37 | 现余额=67 | 运行分钟数=12.3
+  [/^全部账户完成/, "Completed all accounts"],
+  [/处理账户数=/g, "accountsProcessed="],
+  [/获得积分=/g, "pointsGained="],
+  [/原余额=/g, "previousBalance="],
+  [/现余额=/g, "currentBalance="],
+  [/运行分钟数=/g, "runtimeMinutes="],
+  [/持续秒数=/g, "durationSeconds="],
+  // 账户开始/结束
+  [/^开始处理账户:/, "Starting account:"],
+  [/^账户完成:/, "Completed account:"],
+  // 账户级流程失败（fork 只有移动端这一条，桌面端走同一条 Main 流程）
+  [/^(\S+@\S+)\s的移动端流程失败:/, "Mobile flow failed for $1:"],
+  [/^(\S+@\S+)\s的桌面端流程失败:/, "Desktop flow failed for $1:"],
+  // 账户间等待：等待 12.0 秒后开始下一个账户 (a@b.com)
+  [/^等待\s/, "Waiting "],
+  [/\s秒后开始下一个账户/, " seconds before starting the next account"],
+  // 连击保护快照
+  [/^快照完成/, "Snapshot complete"],
+  [/可上报=/g, "reportable="],
+  [/连续保护已启用=/g, "streakProtectionEnabled="],
+  [/连续保护剩余天数=/g, "streakProtectionRemainingDays="],
+  [/连续计数=/g, "streakCounter="],
+  [/等级=/g, "level="],
+  [/账户=/g, "account="],
+  // 无密码登录：待人工批准的数字与批准结果
+  [/^请批准登录并选择数字:/, "Please approve login and select number:"],
+  [/^检测到批准$/, "Approval detected"],
+  [/^登录批准成功$/, "Login approved successfully"],
+  [/^(\d+)\s秒后批准超时!$/, "Approval timeout after $1 seconds!"],
+];
+
+function normalizeChineseMessage(message) {
+  if (typeof message !== "string" || !message) return message;
+  // 只有含中文的消息才走规范化，英文上游日志零开销直通
+  if (!/[\u4e00-\u9fff]/.test(message)) return message;
+  let out = message;
+  for (const [re, to] of ZH_MESSAGE_RULES) out = out.replace(re, to);
+  return out;
+}
+
 /**
  * Strips the leading Docker timestamp, returns { dockerTs, rest }.
  */
@@ -111,7 +163,9 @@ function parseLine(rawLine) {
     return parseWrapperLine(dockerTs, clean);
   }
 
-  const [, appTime, userName, level, platform, title, message] = m;
+  const [, appTime, userName, level, platform, title, rawMessage] = m;
+  // 匹配用规范化后的英文原形；activity 表里仍存原始中文，便于人工回看
+  const message = normalizeChineseMessage(rawMessage);
 
   const base = {
     ts: dockerTs,
@@ -120,7 +174,7 @@ function parseLine(rawLine) {
     level: level.toLowerCase(),
     platform,
     title,
-    message,
+    message: rawMessage,
     raw: clean,
   };
 
