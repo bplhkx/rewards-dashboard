@@ -75,6 +75,8 @@ export const api = {
     call("DELETE", `/api/dashboard-accounts/${encodeURIComponent(email)}`),
 
   addAccount: (payload) => call("POST", "/api/accounts/add", payload),
+  setAccountPlatforms: (index, platforms) =>
+    call("POST", `/api/accounts/${index}/platforms`, { platforms }),
   control: (action, body = {}) => call("POST", `/api/control/${action}`, body),
 };
 

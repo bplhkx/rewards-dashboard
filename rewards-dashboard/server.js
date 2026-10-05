@@ -677,6 +677,13 @@ async function handleApi(req, res, url) {
     return forward(res, "POST", "/accounts", body);
   }
 
+  // 部署侧扩展：修改已有账号跑哪一端（转发到 bot 的 PATCH /accounts/:index）
+  const accountsPlatformsMatch = pathname.match(/^\/api\/accounts\/([1-9]\d*)\/platforms$/);
+  if (accountsPlatformsMatch && method === "POST") {
+    const body = await readJsonBody(req);
+    return forward(res, "PATCH", "/accounts/" + accountsPlatformsMatch[1], body);
+  }
+
   // sessions
   if (pathname === "/api/sessions" && method === "GET") {
     return forward(res, "GET", "/sessions");

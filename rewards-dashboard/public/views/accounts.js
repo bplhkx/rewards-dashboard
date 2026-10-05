@@ -296,6 +296,9 @@ function statusIconParts(statusKey) {
   }
 }
 
+// 部署侧扩展：账号卡片上的"跑哪一端"下拉（写回 bot 的账号文件，下一次运行生效）
+const PLATFORMS_LABELS = { both: "全跑", mobile: "仅移动端", desktop: "仅桌面端" };
+
 function renderAccountPanel(a, live) {
   const protection = protectionPresentation(a);
   const { usable, running } = controlState();
@@ -320,6 +323,30 @@ function renderAccountPanel(a, live) {
     a.configured && Number.isInteger(a.index)
       ? `<button type="button" class="btn btn-primary btn-small" data-run-account="${a.index}" ${!usable || running || launching.has(a.index) ? "disabled" : ""
       } title="Run only ACCOUNT_${a.index}">${launching.has(a.index) ? "Starting\u2026" : "仅运行该账号"}</button>`
+      : "";
+
+  const platformsCurrent = PLATFORMS_LABELS[a.platforms] ? a.platforms : "both";
+  const platformsControl =
+    a.configured && Number.isInteger(a.index)
+      ? '<label class="check acc-platforms" title="该账号跑哪一端；写回 bot 的账号文件，下一次运行生效"><span>端</span>' +
+          '<select class="input" data-platforms="' +
+          a.index +
+          '" ' +
+          (!usable || running ? "disabled" : "") +
+          ">" +
+          Object.keys(PLATFORMS_LABELS)
+            .map(
+              (v) =>
+                '<option value="' +
+                v +
+                '"' +
+                (v === platformsCurrent ? " selected" : "") +
+                ">" +
+                PLATFORMS_LABELS[v] +
+                "</option>",
+            )
+            .join("") +
+          "</select></label>"
       : "";
 
   const selectCheckbox =
@@ -367,6 +394,7 @@ function renderAccountPanel(a, live) {
             <span class="acc-detail-actions">
                 <span class="acc-status-pill">${U.statusPill(statusKey)}</span>
                 ${selectCheckbox}
+                ${platformsControl}
                 ${runButton}
                 ${deleteButton}
             </span>
@@ -411,6 +439,29 @@ function render(root) {
       const index = Number(btn.dataset.runAccount);
       const account = accounts.find((a) => a.index === index);
       if (account) runAccount(account);
+    }),
+  );
+
+  container.querySelectorAll("select[data-platforms]").forEach((sel) =>
+    sel.addEventListener("change", async () => {
+      const index = Number(sel.dataset.platforms);
+      const value = sel.value;
+      sel.disabled = true;
+      try {
+        const res = await context.api.setAccountPlatforms(index, value);
+        context.toast(
+          "ACCOUNT_" + index + " 已设为" + (PLATFORMS_LABELS[value] || value) + "，下一次运行生效。",
+          "success",
+        );
+        if (res && res.note) context.toast(res.note, "warn");
+        context.invalidate();
+        await context.refresh();
+      } catch (error) {
+        context.toast(error.message, "error");
+        // 失败时按服务端真相重绘，避免下拉停在没生效的值上
+        context.invalidate();
+        await context.refresh();
+      }
     }),
   );
 

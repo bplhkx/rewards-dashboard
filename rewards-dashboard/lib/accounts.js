@@ -53,6 +53,7 @@ function buildRow({ config, local, histories }) {
     geoLocale:
       (local && local.geoLocale) || (config && config.geoLocale) || null,
     langCode: config ? config.langCode : null,
+    platforms: config ? (config.platforms || "both") : null,
     hasTotp: config ? Boolean(config.hasTotp) : null,
     hasRecoveryEmail: config ? Boolean(config.hasRecoveryEmail) : null,
     proxy: config ? config.proxy : null,
