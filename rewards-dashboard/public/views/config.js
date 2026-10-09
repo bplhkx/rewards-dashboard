@@ -284,6 +284,20 @@ const FIELD_GROUPS = [
           placeholder: "3min",
         },
       },
+      workerGap: {
+        kind: "delay",
+        label: "Gap between big tasks",
+        min: {
+          path: "workerGap.min",
+          desc: "Minimum pause after each worker (punch cards, daily set, promotions, reads). Fires ~25-30 times per account, so this is the biggest single lever on run length.",
+          placeholder: "1min",
+        },
+        max: {
+          path: "workerGap.max",
+          desc: "Maximum pause after each worker (punch cards, daily set, promotions, reads)",
+          placeholder: "4min",
+        },
+      },
     },
   },
   {
