@@ -243,6 +243,16 @@ const CHECKIN_RULES = [
   {
     title: 'REACT-PARSE',
     parse(message) {
+      // 印章收集优先用页面里那句 "3 / 12 个任务"（bot 打成 stamps=3/12）——
+      // 那才是用户在看的"印章 n/12"；没有它才退回"几张卡完成了几张"。
+      const stamps = /stamps\s*=\s*(\d+)\s*\/\s*(\d+)/.exec(message);
+      if (stamps) {
+        const done = Number(stamps[1]);
+        const total = Number(stamps[2]);
+        if (total > 0 && done <= total) {
+          return { kind: 'punch', days: done, daysMax: total, status: done >= total ? 'complete' : 'progress' };
+        }
+      }
       // "Quest list | parents=2 | incomplete=2" —— 印章收集按"组"算，已完成 = 总数 - 未完成
       const m = /parents\s*=\s*(\d+)[^|]*\|[^|]*incomplete\s*=\s*(\d+)/.exec(message);
       if (!m) return null;

@@ -240,6 +240,23 @@ ok(ci.checkins["level-dailystreaks_mobile"].status === "progress", "App 签到�
 ok(cap("CHECKIN-PROGRESS", "gamepass=true | puzzle=0/0 | broken=9/3", "2026-10-12T01:30:01.000Z") === 0, "没有分母/分母为 0/超过分母的行都不写");
 ok(Object.keys(store.checkinSummary({ days: 90 })[E].checkins).length === 7, "非法行没多出 kind，也没覆盖掉好数据");
 
+// 印章收集：页面里那句 "3 / 12 个任务" 才是用户看的进度，bot 打成 stamps=3/12；
+// 有了它就优先用它，别再报"0/2 组"那种没有信息量的口径。
+ok(
+  cap("REACT-PARSE", "Quest list | parents=2 | incomplete=2 | stamps=3/12", "2026-10-12T01:25:00.000Z") === 1,
+  "带 stamps 的印章行也能捕获"
+);
+ci = store.checkinSummary({ days: 90 })[E];
+ok(
+  ci.checkins["punch"].days === 3 && ci.checkins["punch"].daysMax === 12,
+  "印章进度改用 stamps=3/12，不再是 0/2 组",
+  JSON.stringify(ci.checkins["punch"])
+);
+// 同一轮里后面的行没有 stamps（比如另一张卡的列表），也不能把已有的 3/12 覆盖成 0/2
+ok(cap("REACT-PARSE", "Quest list | parents=2 | incomplete=2", "2026-10-12T01:26:00.000Z") === 1, "无 stamps 时仍按组数写");
+ci = store.checkinSummary({ days: 90 })[E];
+ok(ci.checkins["punch"].days === 0 && ci.checkins["punch"].daysMax === 2, "后到的组数行按最新时间覆盖");
+
 ok(store.checkinSummary({ days: 0 }).constructor === Object, "days 非法也不炸");
 
 console.log(fails ? `\n${fails} 项失败` : "\n全部通过");
