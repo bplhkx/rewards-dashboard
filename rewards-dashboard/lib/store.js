@@ -133,6 +133,21 @@ CREATE TABLE IF NOT EXISTS daily_points (
 ) STRICT;
 CREATE INDEX IF NOT EXISTS idx_daily_points_day ON daily_points(day);
 
+-- daily_points 是聚合表，真正的账本在这里：一行 = 一个账号在一轮里某个分类的得分。
+-- 为什么必须按轮存：live.bySource 是"本轮累计"，每轮开始就归零。以前只按
+-- (账号,天,分类) 存 MAX，同一天跑两轮时第二轮的小值会被第一轮的大值盖掉，
+-- 当天合计就比机器人自己记的少（实测 10-12 少了 101 分）。
+CREATE TABLE IF NOT EXISTS run_points (
+    email TEXT NOT NULL,
+    run_id TEXT NOT NULL,
+    day TEXT NOT NULL,
+    source TEXT NOT NULL,
+    points INTEGER NOT NULL,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (email, run_id, day, source)
+) STRICT;
+CREATE INDEX IF NOT EXISTS idx_run_points_day ON run_points(day);
+
 -- Multi-day check-ins whose progress Microsoft only reports in the log stream
 -- (the bot reads hva_dse_days from the App's level_info and prints "3/14 天").
 -- The activity feed is noisy and gets pruned, so the latest number per
@@ -171,19 +186,97 @@ function prevDay(key, n = 1) {
   return d.toISOString().slice(0, 10);
 }
 
-// 默认搜索引擎的进度只出现在 bot 的日志文本里（"打卡成功 | 4/14 天"），
-// 面板看到的所有行都会经过 apply()，所以在这里把它摘成结构化的一行。
-const DSE_DAYS_RE = /(\d+)\s*\/\s*(\d+)/;
-
-function defaultSearchStatus(message) {
-  if (/打卡成功/.test(message)) return "advanced";
-  if (/活动已完成/.test(message)) return "complete";
-  if (/未确认成功|进度未变/.test(message)) return "stalled";
-  if (/开始默认搜索引擎打卡/.test(message)) return "started";
-  return "progress";
-}
+// 面板看到的每一行日志都会经过 apply()，这些规则把文本里的进度摘成结构化的一行。
+// 一条规则 = 一个 title + 一个解析函数，返回 {kind, days, daysMax, status} 或 null。
+// 加新的打卡类型只要在这里添一条，App 侧靠 kind 查表显示，不用改接口。
+const CHECKIN_RULES = [
+  {
+    title: 'DEFAULT-SEARCH-ENGINE',
+    parse(message) {
+      // 必须带"天"：同一张卡的"第 2/3 次尝试"也是 x/y，混进来会把重试次数当成 2/3 天
+      const m = /(\d+)\s*\/\s*(\d+)\s*天/.exec(message);
+      if (!m) return null;
+      let status = 'progress';
+      if (/打卡成功/.test(message)) status = 'advanced';
+      else if (/活动已完成/.test(message)) status = 'complete';
+      else if (/未确认成功|进度未变/.test(message)) status = 'stalled';
+      else if (/开始默认搜索引擎打卡/.test(message)) status = 'started';
+      return { kind: 'default-search', days: Number(m[1]), daysMax: Number(m[2]), status };
+    },
+  },
+  {
+    title: 'SEARCH-MANAGER',
+    parse(message) {
+      // "Desktop: run (24/30, missing 6)" / "Desktop: skip (complete, 60/60)"
+      const m = /Desktop:[^()]*\(\s*(?:complete,\s*)?(\d+)\s*\/\s*(\d+)/.exec(message);
+      if (!m) return null;
+      return {
+        kind: 'search-today',
+        days: Number(m[1]),
+        daysMax: Number(m[2]),
+        status: /Desktop:\s*skip/.test(message) ? 'complete' : 'progress',
+      };
+    },
+  },
+  {
+    title: 'CHECKIN-PROGRESS',
+    // bot 把 level_info 里的 hva_* 天数成对拼在一行：
+    //   "dse=3/14 | dailyset=2/4 | dailystreaks_mobile=5/7"
+    // dse 与 DEFAULT-SEARCH-ENGINE 是同一个活动，归到同一个 kind，谁新用谁。
+    parse(message) {
+      const out = [];
+      for (const m of message.matchAll(/([a-z0-9_]+)\s*=\s*(\d+)\s*\/\s*(\d+)/gi)) {
+        const name = m[1].toLowerCase();
+        const days = Number(m[2]);
+        const daysMax = Number(m[3]);
+        if (!daysMax || days > daysMax) continue;
+        out.push({
+          kind: name === "dse" ? "default-search" : `level-${name}`,
+          days,
+          daysMax,
+          status: days >= daysMax ? "complete" : "progress",
+        });
+      }
+      return out;
+    },
+  },
+  {
+    title: 'REACT-PARSE',
+    parse(message) {
+      // "Quest list | parents=2 | incomplete=2" —— 印章收集按"组"算，已完成 = 总数 - 未完成
+      const m = /parents\s*=\s*(\d+)[^|]*\|[^|]*incomplete\s*=\s*(\d+)/.exec(message);
+      if (!m) return null;
+      const max = Number(m[1]);
+      const incomplete = Number(m[2]);
+      if (!max) return null;
+      return {
+        kind: 'punch',
+        days: Math.max(0, max - incomplete),
+        daysMax: max,
+        status: incomplete === 0 ? 'complete' : 'progress',
+      };
+    },
+  },
+  {
+    title: 'DAILY-SET',
+    parse(message) {
+      if (!/already been completed/i.test(message)) return null;
+      return { kind: 'daily-set-today', days: 1, daysMax: 1, status: 'complete' };
+    },
+  },
+  {
+    title: 'DAILY-CHECK-IN',
+    parse(message) {
+      if (!/completed/i.test(message)) return null;
+      return { kind: 'app-checkin-today', days: 1, daysMax: 1, status: 'complete' };
+    },
+  },
+];
 
 class Store {
+  /// 捕获规则覆盖到的日志 title，回填脚本按这个集合筛行
+  static CHECKIN_TITLES = [...new Set(CHECKIN_RULES.map((r) => r.title))];
+
   constructor() {
     fs.mkdirSync(DATA_DIR, { recursive: true });
     this.db = new DatabaseSync(DB_FILE);
@@ -273,6 +366,30 @@ class Store {
       dailyPointsSince: this.db.prepare(
         "SELECT email, day, source, points, updated_at FROM daily_points WHERE day >= ? ORDER BY day, email, source",
       ),
+
+      // 账本：一行 = 某账号某轮某分类的得分。同一轮被反复采样取 MAX（幂等），
+      // 不同轮之间相加，所以一天跑两轮不会再丢第二轮的分。
+      upsertRunPoint: this.db.prepare(`
+                INSERT INTO run_points (email, run_id, day, source, points, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT(email, run_id, day, source) DO UPDATE SET
+                    points = MAX(run_points.points, excluded.points),
+                    updated_at = excluded.updated_at
+            `),
+      rebuildDailyPoint: this.db.prepare(`
+                INSERT INTO daily_points (email, day, source, points, updated_at)
+                SELECT email, day, source, SUM(points), MAX(updated_at)
+                FROM run_points WHERE email = ? AND day = ? AND source = ?
+                GROUP BY email, day, source
+                ON CONFLICT(email, day, source) DO UPDATE SET
+                    points = excluded.points,
+                    updated_at = excluded.updated_at
+            `),
+      countRunPoints: this.db.prepare("SELECT COUNT(*) AS n FROM run_points"),
+      seedRunPoints: this.db.prepare(`
+                INSERT OR IGNORE INTO run_points (email, run_id, day, source, points, updated_at)
+                SELECT email, 'legacy', day, source, points, updated_at FROM daily_points
+            `),
 
       // 进度只能往前走：同一账号同一 kind 只留 ts 最新的那条，晚到的旧日志行不覆盖。
       upsertCheckinProgress: this.db.prepare(`
@@ -465,6 +582,22 @@ class Store {
                 )
             `),
     };
+
+    // 账本上线之前留下的聚合行没有轮次身份，先把它们原样登记成一轮 "legacy"，
+    // 之后的新轮次就是加在它上面，而不是被 MAX 吞掉。只在账本为空时做一次。
+    if (this.stmts.countRunPoints.get().n === 0) {
+      this.stmts.seedRunPoints.run();
+    }
+  }
+
+  /// 当前这一轮的身份：面板自己的 runs 表里那条 running 行。
+  /// 没有进行中的轮次就返回 null —— 此时 /status 里那份缓存快照属于已经记过账的轮次，
+  /// 再记一遍就是把同一轮算两次。
+  activeRunId() {
+    const row = this.db
+      .prepare("SELECT id FROM runs WHERE status = 'running' ORDER BY start_ts DESC LIMIT 1")
+      .get();
+    return row ? String(row.id) : null;
   }
 
   _readMeta(key) {
@@ -633,7 +766,7 @@ class Store {
 
     // 打卡进度走的是 info/warn 普通行，落在下面 switch 的 generic 分支里会被丢掉
     // （只有 warn/error 才进 activity），所以必须在 switch 之前先摘出来。
-    this._captureDefaultSearch(event);
+    this._captureCheckins(event);
 
     let changed = true;
 
@@ -1100,25 +1233,28 @@ class Store {
    * Persist the live per-source points the bot reports for the current run.
    * @param accounts status.run.accounts[] - each may carry live.bySource
    * @param at       Date the sample was taken (only the fallback day bucket)
+   * @param runId    本轮身份；默认取面板正在跑的那条 runs 行
    * @returns number of rows written
    */
-  recordLivePoints(accounts, at = new Date()) {
+  recordLivePoints(accounts, at = new Date(), runId = this.activeRunId()) {
     if (!Array.isArray(accounts) || !accounts.length) return 0;
+    // 没有进行中的轮次 = 这份 run.accounts 是 /status 缓存的上一轮，已经记过账了
+    if (!runId) return 0;
     const stamp = at.toISOString();
     let written = 0;
     for (const account of accounts) {
       const email = account?.email;
       const bySource = account?.live?.bySource;
       if (!email || !bySource || typeof bySource !== "object") continue;
-      // 按 bot 自己的观测时间归日，不能按轮询的挂钟：一轮跑完后 Control API 的
-      // /status 会把同一份 run.accounts 一直缓存到下一轮，若用 new Date()，跨过北京
-      // 零点后的每次轮询都会把昨天那一整轮再记成"今天"，凭空多出一天的幻影积分。
+      // 按 bot 自己的观测时间归日，不能按轮询的挂钟：轮询会长期拿到同一份缓存快照，
+      // 若用 new Date()，跨过北京零点后就会把昨天那一轮再记成"今天"。
       const observed = parseIsoTs(account.live.lastUpdateTs) ?? at;
       const day = beijingDay(observed);
       for (const [source, raw] of Object.entries(bySource)) {
         const points = Number(raw);
         if (!Number.isFinite(points) || points <= 0) continue;
-        this.stmts.upsertDailyPoint.run(email, day, String(source), Math.round(points), stamp);
+        this.stmts.upsertRunPoint.run(email, String(runId), day, String(source), Math.round(points), stamp);
+        this.stmts.rebuildDailyPoint.run(email, day, String(source));
         written++;
       }
     }
@@ -1148,34 +1284,48 @@ class Store {
   }
 
   /**
-   * 把日志里的"默认搜索引擎 x/y 天"摘成结构化进度。
-   * 这类行只带 userName（DESKTOP 会话的账号名），邮箱要靠 accounts 表反查。
-   * @returns 是否写入了 checkin_progress
+   * 按 CHECKIN_RULES 把一行日志里的进度摘进 checkin_progress。
+   * 这类行大多只带 userName（DESKTOP/MOBILE 会话的账号名），邮箱靠 accounts 表反查。
+   * @returns 写入了几条（同一行命中多条规则时可能 >1）
    */
-  _captureDefaultSearch(event) {
-    if (!event || event.title !== "DEFAULT-SEARCH-ENGINE") return false;
+  _captureCheckins(event) {
+    if (!event || typeof event.title !== "string") return 0;
     const msg = String(event.message || "");
-    const m = DSE_DAYS_RE.exec(msg);
-    if (!m) return false; // "本账户不可用（未提供 hva_dse 进度）"这类没有数字的行
-    const days = Number(m[1]);
-    const daysMax = Number(m[2]);
-    if (!Number.isFinite(days) || !Number.isFinite(daysMax) || daysMax <= 0 || days > daysMax) {
-      return false;
+    if (!msg) return 0;
+    let email = null; // 懒查：多数日志行一条规则都不命中，别白白查库
+    let written = 0;
+    for (const rule of CHECKIN_RULES) {
+      if (rule.title !== event.title) continue;
+      let result = null;
+      try {
+        result = rule.parse(msg);
+      } catch {
+        continue; // 规则解析失败不能把整行 ingest 带崩
+      }
+      // 一行可能带好几种进度（CHECKIN-PROGRESS），规则返回数组或单个对象
+      const entries = Array.isArray(result) ? result : result ? [result] : [];
+      for (const parsed of entries) {
+        const { kind, days, daysMax, status } = parsed || {};
+        if (!kind || !Number.isFinite(days) || !Number.isFinite(daysMax) || daysMax <= 0 || days > daysMax) {
+          continue;
+        }
+        email ??=
+          event.email ||
+          (event.userName ? this.stmts.emailByUserName.get(event.userName)?.email ?? null : null);
+        if (!email) continue;
+        this.stmts.upsertCheckinProgress.run(
+          email,
+          kind,
+          Math.round(days),
+          Math.round(daysMax),
+          status || "progress",
+          event.ts,
+          event.userName || null,
+        );
+        written++;
+      }
     }
-    const email =
-      event.email ||
-      (event.userName ? this.stmts.emailByUserName.get(event.userName)?.email ?? null : null);
-    if (!email) return false;
-    this.stmts.upsertCheckinProgress.run(
-      email,
-      "default-search",
-      days,
-      daysMax,
-      defaultSearchStatus(msg),
-      event.ts,
-      event.userName || null,
-    );
-    return true;
+    return written;
   }
 
   /**
@@ -1193,11 +1343,16 @@ class Store {
     }
     const checkins = {};
     for (const row of this.stmts.allCheckinProgress.all()) {
+      // 带 day/today 是为了让界面分得清"今天已经推过"和"这条还是昨天那轮的数"
+      const at = parseIsoTs(row.ts);
+      const day = at ? beijingDay(at) : "";
       (checkins[row.email] ??= {})[row.kind] = {
         days: row.days,
         daysMax: row.days_max,
         status: row.status,
         ts: row.ts,
+        day,
+        today: day === today,
       };
     }
     const streakOf = (set) => {
