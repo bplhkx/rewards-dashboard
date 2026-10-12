@@ -117,7 +117,28 @@ CREATE TABLE IF NOT EXISTS activity (
     raw TEXT
 ) STRICT;
 CREATE INDEX IF NOT EXISTS idx_activity_ts ON activity(ts);
+
+-- Per-account, per-day, per-source points. The bot only keeps live.bySource in
+-- memory (cleared on every new run and on an API restart), so this table is the
+-- durable copy: one row per (email, Beijing day, source). "Today" is just the
+-- row for the current day, which is why nothing needs to be reset at midnight -
+-- a new day simply starts writing a new key.
+CREATE TABLE IF NOT EXISTS daily_points (
+    email TEXT NOT NULL,
+    day TEXT NOT NULL,
+    source TEXT NOT NULL,
+    points INTEGER NOT NULL,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (email, day, source)
+) STRICT;
+CREATE INDEX IF NOT EXISTS idx_daily_points_day ON daily_points(day);
 `;
+
+// Daily-set / search offers are keyed by the account's own day, and every
+// account here is CN, so "today" means Beijing regardless of the host TZ.
+function beijingDay(d = new Date()) {
+  return d.toLocaleDateString("en-CA", { timeZone: "Asia/Shanghai" });
+}
 
 class Store {
   constructor() {
@@ -192,9 +213,22 @@ class Store {
 
   _prepare() {
     this.stmts = {
-      getMeta: this.db.prepare("SELECT value FROM meta WHERE key = ?"),
-      setMeta: this.db.prepare(
+      getMeta: this.db.prepare("SELECT value FROM meta WHERE key = ?"),      setMeta: this.db.prepare(
         "INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+      ),
+
+      // MAX() keeps this idempotent: the bot's bySource is cumulative within a
+      // run, so re-reporting the same (or a smaller, post-restart) value must
+      // never add points twice or shrink what a day already earned.
+      upsertDailyPoint: this.db.prepare(`
+                INSERT INTO daily_points (email, day, source, points, updated_at)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(email, day, source) DO UPDATE SET
+                    points = MAX(daily_points.points, excluded.points),
+                    updated_at = excluded.updated_at
+            `),
+      dailyPointsSince: this.db.prepare(
+        "SELECT email, day, source, points, updated_at FROM daily_points WHERE day >= ? ORDER BY day, email, source",
       ),
 
       upsertAccountStart: this.db.prepare(`
@@ -991,6 +1025,53 @@ class Store {
 
   snapshotAccounts() {
     return this.stmts.allAccounts.all();
+  }
+
+  /**
+   * Persist the live per-source points the bot reports for the current run.
+   * @param accounts status.run.accounts[] - each may carry live.bySource
+   * @param at       Date the sample was taken (decides the Beijing day bucket)
+   * @returns number of rows written
+   */
+  recordLivePoints(accounts, at = new Date()) {
+    if (!Array.isArray(accounts) || !accounts.length) return 0;
+    const day = beijingDay(at);
+    const stamp = at.toISOString();
+    let written = 0;
+    for (const account of accounts) {
+      const email = account?.email;
+      const bySource = account?.live?.bySource;
+      if (!email || !bySource || typeof bySource !== "object") continue;
+      for (const [source, raw] of Object.entries(bySource)) {
+        const points = Number(raw);
+        if (!Number.isFinite(points) || points <= 0) continue;
+        this.stmts.upsertDailyPoint.run(email, day, String(source), Math.round(points), stamp);
+        written++;
+      }
+    }
+    return written;
+  }
+
+  /**
+   * Daily per-source totals, newest day first, for the app's account detail.
+   * @returns { [email]: [{ day, total, sources: { search: 30, ... } }] }
+   */
+  dailyPointsByAccount({ days = 30 } = {}) {
+    const since = new Date(Date.now() - days * 86400000).toLocaleDateString("en-CA", {
+      timeZone: "Asia/Shanghai",
+    });
+    const grouped = {};
+    for (const row of this.stmts.dailyPointsSince.all(since)) {
+      const perDay = (grouped[row.email] ??= {});
+      const entry = (perDay[row.day] ??= { day: row.day, total: 0, sources: {} });
+      entry.sources[row.source] = row.points;
+      entry.total += row.points;
+    }
+    const out = {};
+    for (const [email, perDay] of Object.entries(grouped)) {
+      out[email] = Object.values(perDay).sort((a, b) => (a.day < b.day ? 1 : -1));
+    }
+    return out;
   }
 
   snapshotRuns(limit = 30) {

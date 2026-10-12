@@ -170,6 +170,14 @@ hub.on("status", (status) => {
   const wasRunning = Boolean(backend.bot && backend.bot.state !== "idle");
   backend.bot = status;
 
+  // live.bySource only exists in the bot's memory; snapshot it to sqlite here so
+  // a day's breakdown survives the next run and any Control API restart.
+  try {
+    store.recordLivePoints(status?.run?.accounts);
+  } catch (e) {
+    log("warn", `Could not record daily points: ${e.message}`);
+  }
+
   if (status.reason === "exit" && wasRunning && status.lastExit) {
     try {
       store.closeRunOnExit(status.lastExit);
@@ -254,6 +262,9 @@ async function pollOnce() {
 
   try {
     backend.bot = await client.get("/status");
+    // The SSE stream can lag or drop; the poll is the safety net for the daily
+    // points snapshot. upsertDailyPoint uses MAX(), so double-sampling is free.
+    store.recordLivePoints(backend.bot?.run?.accounts);
   } catch (e) {
     if (e.statusCode === 401) authFailed = true;
     backend.lastError =
@@ -497,6 +508,11 @@ async function handleApi(req, res, url) {
     return sendJson(res, 200, {
       accounts: mergeAccounts(apiAccounts, store.snapshotAccounts(), histories),
       histories,
+      // Per-day, per-source totals (the durable copy of the bot's live.bySource)
+      dailyPoints: store.dailyPointsByAccount({
+        days: Math.min(366, Math.max(1, effectiveHistoryDays || 30)),
+      }),
+      today: new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Shanghai" }),
       historyDays: effectiveHistoryDays,
       apiError,
     });
