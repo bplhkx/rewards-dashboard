@@ -104,6 +104,10 @@ const TOGGLE_GROUPS = [
         label: "Visual search",
         desc: "Activate the visual-search streak and perform visual searches",
       },
+      "workers.doDefaultSearchEngine": {
+        label: "Default search engine",
+        desc: 'Keep Bing as the default search engine: one qualifying search per day (14-day activity)',
+      },
     },
   },
   {
