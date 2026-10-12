@@ -76,5 +76,85 @@ ok(dp["d@outlook.com"][0].day === "2026-10-11", "lastUpdateTs 非法时退回轮
 ok(store.recordLivePoints(undefined) === 0, "accounts 非数组时安全返回 0");
 ok(store.recordLivePoints([{ email: null }, { live: {} }, {}]) === 0, "缺字段时安全跳过");
 
+// ---- 打卡情况（checkinSummary）：连续天数 + 默认搜索引擎进度 ----
+// 这一段刻意用"相对真实今天"的天数造数据：checkinSummary 的 today 就是真实北京今天，
+// 写死日期会像上面的幻影日测试那样随挂钟漂移。
+const relDay = (back) =>
+  new Date(Date.now() - back * 86400000).toLocaleDateString("en-CA", { timeZone: "Asia/Shanghai" });
+const relAt = (back) => new Date(Date.now() - back * 86400000);
+const E = "e@outlook.com";
+
+// search 今天+昨天+前天=3；read 今天+前天（昨天断）=1；checkIn 只有昨天+前天=2 且今天未打卡
+store.recordLivePoints([{ email: E, live: { bySource: { search: 30 } } }], relAt(0));
+store.recordLivePoints([{ email: E, live: { bySource: { search: 30, checkIn: 15 } } }], relAt(1));
+store.recordLivePoints([{ email: E, live: { bySource: { search: 30, checkIn: 15 } } }], relAt(2));
+store.recordLivePoints([{ email: E, live: { bySource: { read: 30 } } }], relAt(0));
+store.recordLivePoints([{ email: E, live: { bySource: { read: 30 } } }], relAt(2));
+let ci = store.checkinSummary({ days: 90 })[E];
+ok(ci.tasks.search.streak === 3 && ci.tasks.search.todayDone === true, "连续 3 天", JSON.stringify(ci.tasks.search));
+ok(ci.tasks.read.streak === 1, "昨天断了就从今天重新数", JSON.stringify(ci.tasks.read));
+ok(ci.tasks.checkIn.streak === 2 && ci.tasks.checkIn.todayDone === false, "今天还没跑不算断，只标今日未打卡", JSON.stringify(ci.tasks.checkIn));
+ok(ci.checkins["default-search"] === undefined, "没有打卡日志时不编造进度");
+
+// 默认搜索引擎进度来自日志行：先要有 accounts 行才能把 userName 反查成 email
+const ev = (event) => store.apply({ kind: "generic", level: "info", ...event });
+ok(
+  ev({
+    ts: "2026-10-12T01:00:01.000Z",
+    kind: "account-start",
+    title: "ACCOUNT-START",
+    email: E,
+    userName: "eee",
+  }) === true,
+  "ACCOUNT-START 落库（供 userName 反查邮箱）"
+);
+ev({
+  ts: "2026-10-12T01:00:02.000Z",
+  title: "DEFAULT-SEARCH-ENGINE",
+  message: "默认搜索引擎打卡成功 | 4/14 天 | 来源=app",
+  userName: "eee",
+});
+ci = store.checkinSummary({ days: 90 })[E];
+ok(
+  ci.checkins["default-search"]?.days === 4 &&
+    ci.checkins["default-search"].daysMax === 14 &&
+    ci.checkins["default-search"].status === "advanced",
+  "按 userName 反查邮箱并记下进度",
+  JSON.stringify(ci.checkins["default-search"])
+);
+// apply() 自己有 lastTs 顺序闸门，乱序行到不了这里；直接测捕获函数 + SQL 的时间闸门
+ok(
+  store._captureDefaultSearch({
+    ts: "2026-10-12T00:30:00.000Z",
+    title: "DEFAULT-SEARCH-ENGINE",
+    message: "开始默认搜索引擎打卡 | 进度=2/14 天 | 来源=web",
+    email: E,
+  }) === true,
+  "进度行按 email 也能捕获"
+);
+ci = store.checkinSummary({ days: 90 })[E];
+ok(ci.checkins["default-search"].days === 4, "ts 更早的行不把进度往回带", JSON.stringify(ci.checkins["default-search"]));
+ok(
+  store._captureDefaultSearch({
+    ts: "2026-10-12T01:10:00.000Z",
+    title: "DEFAULT-SEARCH-ENGINE",
+    message: "默认搜索引擎活动在本账户不可用（仪表板未提供 hva_dse 进度）",
+    email: E,
+  }) === false,
+  "没有数字的行忽略"
+);
+ok(
+  store._captureDefaultSearch({
+    ts: "2026-10-12T01:10:00.000Z",
+    title: "DEFAULT-SEARCH-ENGINE",
+    message: "默认搜索引擎打卡成功 | 5/14 天",
+    userName: "查不到的人",
+  }) === false,
+  "认不出账号时不写，也不硬塞给某个账号"
+);
+ci = store.checkinSummary({ days: 90 })[E];
+ok(ci.checkins["default-search"].days === 4, "被忽略的行不影响已记进度");
+ok(store.checkinSummary({ days: 0 }).constructor === Object, "days 非法也不炸");
+
 console.log(fails ? `\n${fails} 项失败` : "\n全部通过");
 process.exit(fails ? 1 : 0);

@@ -132,6 +132,21 @@ CREATE TABLE IF NOT EXISTS daily_points (
     PRIMARY KEY (email, day, source)
 ) STRICT;
 CREATE INDEX IF NOT EXISTS idx_daily_points_day ON daily_points(day);
+
+-- Multi-day check-ins whose progress Microsoft only reports in the log stream
+-- (the bot reads hva_dse_days from the App's level_info and prints "3/14 天").
+-- The activity feed is noisy and gets pruned, so the latest number per
+-- (account, kind) lives here instead - one row that moves forward as days pass.
+CREATE TABLE IF NOT EXISTS checkin_progress (
+    email TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    days INTEGER NOT NULL,
+    days_max INTEGER NOT NULL,
+    status TEXT NOT NULL,
+    ts TEXT NOT NULL,
+    user_name TEXT,
+    PRIMARY KEY (email, kind)
+) STRICT;
 `;
 
 // Daily-set / search offers are keyed by the account's own day, and every
@@ -146,6 +161,26 @@ function parseIsoTs(value) {
   if (typeof value !== "string" || !value) return null;
   const d = new Date(value);
   return Number.isNaN(d.getTime()) ? null : d;
+}
+
+// "YYYY-MM-DD" 往前 n 天。按 UTC 正午解析再回推，避开任何时区/夏令时的整日偏移。
+function prevDay(key, n = 1) {
+  const d = new Date(`${key}T12:00:00Z`);
+  if (Number.isNaN(d.getTime())) return "";
+  d.setUTCDate(d.getUTCDate() - n);
+  return d.toISOString().slice(0, 10);
+}
+
+// 默认搜索引擎的进度只出现在 bot 的日志文本里（"打卡成功 | 4/14 天"），
+// 面板看到的所有行都会经过 apply()，所以在这里把它摘成结构化的一行。
+const DSE_DAYS_RE = /(\d+)\s*\/\s*(\d+)/;
+
+function defaultSearchStatus(message) {
+  if (/打卡成功/.test(message)) return "advanced";
+  if (/活动已完成/.test(message)) return "complete";
+  if (/未确认成功|进度未变/.test(message)) return "stalled";
+  if (/开始默认搜索引擎打卡/.test(message)) return "started";
+  return "progress";
 }
 
 class Store {
@@ -237,6 +272,28 @@ class Store {
             `),
       dailyPointsSince: this.db.prepare(
         "SELECT email, day, source, points, updated_at FROM daily_points WHERE day >= ? ORDER BY day, email, source",
+      ),
+
+      // 进度只能往前走：同一账号同一 kind 只留 ts 最新的那条，晚到的旧日志行不覆盖。
+      upsertCheckinProgress: this.db.prepare(`
+                INSERT INTO checkin_progress (email, kind, days, days_max, status, ts, user_name)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(email, kind) DO UPDATE SET
+                    days = excluded.days,
+                    days_max = excluded.days_max,
+                    status = excluded.status,
+                    ts = excluded.ts,
+                    user_name = excluded.user_name
+                WHERE excluded.ts >= checkin_progress.ts
+            `),
+      checkinsByEmail: this.db.prepare(
+        "SELECT kind, days, days_max, status, ts, user_name FROM checkin_progress WHERE email = ?",
+      ),
+      allCheckinProgress: this.db.prepare(
+        "SELECT email, kind, days, days_max, status, ts, user_name FROM checkin_progress ORDER BY email, kind",
+      ),
+      emailByUserName: this.db.prepare(
+        "SELECT email FROM accounts WHERE user_name = ? AND email IS NOT NULL LIMIT 1",
       ),
 
       upsertAccountStart: this.db.prepare(`
@@ -573,6 +630,10 @@ class Store {
     }
     this._lastTs = event.ts;
     this._writeMeta("lastTs", event.ts);
+
+    // 打卡进度走的是 info/warn 普通行，落在下面 switch 的 generic 分支里会被丢掉
+    // （只有 warn/error 才进 activity），所以必须在 switch 之前先摘出来。
+    this._captureDefaultSearch(event);
 
     let changed = true;
 
@@ -1086,10 +1147,88 @@ class Store {
     return out;
   }
 
+  /**
+   * 把日志里的"默认搜索引擎 x/y 天"摘成结构化进度。
+   * 这类行只带 userName（DESKTOP 会话的账号名），邮箱要靠 accounts 表反查。
+   * @returns 是否写入了 checkin_progress
+   */
+  _captureDefaultSearch(event) {
+    if (!event || event.title !== "DEFAULT-SEARCH-ENGINE") return false;
+    const msg = String(event.message || "");
+    const m = DSE_DAYS_RE.exec(msg);
+    if (!m) return false; // "本账户不可用（未提供 hva_dse 进度）"这类没有数字的行
+    const days = Number(m[1]);
+    const daysMax = Number(m[2]);
+    if (!Number.isFinite(days) || !Number.isFinite(daysMax) || daysMax <= 0 || days > daysMax) {
+      return false;
+    }
+    const email =
+      event.email ||
+      (event.userName ? this.stmts.emailByUserName.get(event.userName)?.email ?? null : null);
+    if (!email) return false;
+    this.stmts.upsertCheckinProgress.run(
+      email,
+      "default-search",
+      days,
+      daysMax,
+      defaultSearchStatus(msg),
+      event.ts,
+      event.userName || null,
+    );
+    return true;
+  }
+
+  /**
+   * 每个账号的打卡情况：跨天连续型活动（默认搜索引擎 x/y 天）+ 各分类的连续得分天数。
+   * 连续天数从 daily_points 往前倒推；今天还没跑不算断，另外用 todayDone 标出来。
+   * @returns { [email]: { today, tasks: { search: {streak, todayDone}, ... }, checkins: { 'default-search': {...} } } }
+   */
+  checkinSummary({ days = 90 } = {}) {
+    const today = beijingDay();
+    const since = prevDay(today, Math.max(1, Math.min(3650, Number(days) || 90)));
+    const seen = {}; // email -> source -> Set(day)
+    for (const row of this.stmts.dailyPointsSince.all(since)) {
+      const bySource = (seen[row.email] ??= {});
+      (bySource[row.source] ??= new Set()).add(row.day);
+    }
+    const checkins = {};
+    for (const row of this.stmts.allCheckinProgress.all()) {
+      (checkins[row.email] ??= {})[row.kind] = {
+        days: row.days,
+        daysMax: row.days_max,
+        status: row.status,
+        ts: row.ts,
+      };
+    }
+    const streakOf = (set) => {
+      if (!set || !set.size) return { streak: 0, todayDone: false };
+      const todayDone = set.has(today);
+      let cursor = todayDone ? today : prevDay(today);
+      let streak = 0;
+      while (set.has(cursor)) {
+        streak++;
+        cursor = prevDay(cursor);
+      }
+      return { streak, todayDone };
+    };
+
+    const out = {};
+    for (const [email, bySource] of Object.entries(seen)) {
+      const tasks = {};
+      for (const [source, set] of Object.entries(bySource)) tasks[source] = streakOf(set);
+      out[email] = { today, tasks, checkins: checkins[email] ?? {} };
+    }
+    // 只有打卡进度、还没有积分记录的账号也要出现在结果里
+    for (const [email, c] of Object.entries(checkins)) {
+      out[email] ??= { today, tasks: {}, checkins: {} };
+      out[email].checkins = c;
+    }
+    return out;
+  }
+
   snapshotRuns(limit = 30) {
     return this.stmts.recentRuns.all(limit);
   }
-
   allAccountHistories({ since = null } = {}) {
     const rows = since
       ? this.stmts.allHistoriesSince.all(since)

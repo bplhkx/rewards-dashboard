@@ -512,6 +512,9 @@ async function handleApi(req, res, url) {
       dailyPoints: store.dailyPointsByAccount({
         days: Math.min(366, Math.max(1, effectiveHistoryDays || 30)),
       }),
+      // 连续打卡情况：跨天活动（默认搜索引擎 x/y 天）+ 各分类的连续得分天数。
+      // 窗口固定 90 天，和 historyDays 无关 —— 再长的连胜也不影响这一屏的读法。
+      checkins: store.checkinSummary({ days: 90 }),
       today: new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Shanghai" }),
       historyDays: effectiveHistoryDays,
       apiError,
