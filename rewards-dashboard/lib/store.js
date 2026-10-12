@@ -140,6 +140,14 @@ function beijingDay(d = new Date()) {
   return d.toLocaleDateString("en-CA", { timeZone: "Asia/Shanghai" });
 }
 
+// The bot stamps every point event with entry.receivedAt (true UTC ISO). Anything
+// else - null, a log line's local string, junk - falls back to the sample time.
+function parseIsoTs(value) {
+  if (typeof value !== "string" || !value) return null;
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
 class Store {
   constructor() {
     fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -1030,18 +1038,22 @@ class Store {
   /**
    * Persist the live per-source points the bot reports for the current run.
    * @param accounts status.run.accounts[] - each may carry live.bySource
-   * @param at       Date the sample was taken (decides the Beijing day bucket)
+   * @param at       Date the sample was taken (only the fallback day bucket)
    * @returns number of rows written
    */
   recordLivePoints(accounts, at = new Date()) {
     if (!Array.isArray(accounts) || !accounts.length) return 0;
-    const day = beijingDay(at);
     const stamp = at.toISOString();
     let written = 0;
     for (const account of accounts) {
       const email = account?.email;
       const bySource = account?.live?.bySource;
       if (!email || !bySource || typeof bySource !== "object") continue;
+      // 按 bot 自己的观测时间归日，不能按轮询的挂钟：一轮跑完后 Control API 的
+      // /status 会把同一份 run.accounts 一直缓存到下一轮，若用 new Date()，跨过北京
+      // 零点后的每次轮询都会把昨天那一整轮再记成"今天"，凭空多出一天的幻影积分。
+      const observed = parseIsoTs(account.live.lastUpdateTs) ?? at;
+      const day = beijingDay(observed);
       for (const [source, raw] of Object.entries(bySource)) {
         const points = Number(raw);
         if (!Number.isFinite(points) || points <= 0) continue;

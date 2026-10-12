@@ -49,6 +49,30 @@ dp = store.dailyPointsByAccount({ days: 30 });
 ok(dp["a@outlook.com"][0].day === "2026-10-12", "零点后落到新的一天", dp["a@outlook.com"].map((x) => x.day).join(","));
 ok(dp["a@outlook.com"].length === 2, "前一天记录保留（历史不清）");
 
+// 幻影日回归：一轮跑完后 Control API 的 /status 会长期缓存同一份 run.accounts
+// （live.bySource + 那一轮自己的 lastUpdateTs）。归日必须跟着观测时间走，
+// 否则跨过北京零点后的每次轮询都会把昨天整轮再记成"今天"。
+const cached = [
+  { email: "c@outlook.com", live: { bySource: { urlReward: 30 }, lastUpdateTs: "2026-10-11T13:00:00Z" } },
+];
+ok(store.recordLivePoints(cached, new Date("2026-10-11T13:00:00Z")) === 1, "带 lastUpdateTs 的快照正常写入");
+store.recordLivePoints(cached, new Date("2026-10-12T01:00:00Z"));
+store.recordLivePoints(cached, new Date("2026-10-12T16:30:00Z")); // 北京 10-13 00:30 的轮询
+dp = store.dailyPointsByAccount({ days: 30 });
+const cd = dp["c@outlook.com"] || [];
+ok(
+  cd.length === 1 && cd[0].day === "2026-10-11" && cd[0].total === 30,
+  "缓存快照跨零点重轮询不会多出幻影日",
+  cd.map((x) => `${x.day}:${x.total}`).join(",")
+);
+
+store.recordLivePoints(
+  [{ email: "d@outlook.com", live: { bySource: { search: 9 }, lastUpdateTs: "不是时间" } }],
+  new Date("2026-10-11T02:00:00Z")
+);
+dp = store.dailyPointsByAccount({ days: 30 });
+ok(dp["d@outlook.com"][0].day === "2026-10-11", "lastUpdateTs 非法时退回轮询时间");
+
 ok(store.recordLivePoints(undefined) === 0, "accounts 非数组时安全返回 0");
 ok(store.recordLivePoints([{ email: null }, { live: {} }, {}]) === 0, "缺字段时安全跳过");
 
