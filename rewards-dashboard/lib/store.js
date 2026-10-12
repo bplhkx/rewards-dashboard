@@ -225,13 +225,16 @@ const CHECKIN_RULES = [
     // dse 与 DEFAULT-SEARCH-ENGINE 是同一个活动，归到同一个 kind，谁新用谁。
     parse(message) {
       const out = [];
-      for (const m of message.matchAll(/([a-z0-9_]+)\s*=\s*(\d+)\s*\/\s*(\d+)/gi)) {
+      // 名字里可能有连字符（streak-cn-bing-com），别把它截断成 "com"
+      for (const m of message.matchAll(/([a-z0-9_-]+)\s*=\s*(\d+)\s*\/\s*(\d+)/gi)) {
         const name = m[1].toLowerCase();
         const days = Number(m[2]);
         const daysMax = Number(m[3]);
         if (!daysMax || days > daysMax) continue;
         out.push({
-          kind: name === "dse" ? "default-search" : `level-${name}`,
+          // kind 直接用 bot 打出来的名字（dse / dailyset / streak-bing / tasks-bing…），
+          // 只有默认搜索引擎沿用已有的 kind 名；界面按关键字归类，不再加 level- 前缀
+          kind: name === "dse" ? "default-search" : name,
           days,
           daysMax,
           status: days >= daysMax ? "complete" : "progress",
@@ -243,8 +246,11 @@ const CHECKIN_RULES = [
   {
     title: 'REACT-PARSE',
     parse(message) {
-      // 印章收集优先用页面里那句 "3 / 12 个任务"（bot 打成 stamps=3/12）——
-      // 那才是用户在看的"印章 n/12"；没有它才退回"几张卡完成了几张"。
+      // 两种口径必须分成两个 kind：
+      //   stamps=3/12  → 页面里那句 "3 / 12 个任务"，就是用户看的"印章 n/12"
+      //   parents/incomplete → 只是"几张卡、几张没完成"
+      // 以前两者都写成 punch，于是解析不到 stamps 时界面会画出两个格子，
+      // 看着像"总共只有 2 枚印章"。
       const stamps = /stamps\s*=\s*(\d+)\s*\/\s*(\d+)/.exec(message);
       if (stamps) {
         const done = Number(stamps[1]);
@@ -253,14 +259,13 @@ const CHECKIN_RULES = [
           return { kind: 'punch', days: done, daysMax: total, status: done >= total ? 'complete' : 'progress' };
         }
       }
-      // "Quest list | parents=2 | incomplete=2" —— 印章收集按"组"算，已完成 = 总数 - 未完成
       const m = /parents\s*=\s*(\d+)[^|]*\|[^|]*incomplete\s*=\s*(\d+)/.exec(message);
       if (!m) return null;
       const max = Number(m[1]);
       const incomplete = Number(m[2]);
       if (!max) return null;
       return {
-        kind: 'punch',
+        kind: 'punch-cards',
         days: Math.max(0, max - incomplete),
         daysMax: max,
         status: incomplete === 0 ? 'complete' : 'progress',

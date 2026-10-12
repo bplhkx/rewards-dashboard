@@ -207,15 +207,15 @@ ok(
   "写一条昨天的印章记录"
 );
 ci = store.checkinSummary({ days: 90 })[E];
-ok(ci.checkins["punch"].today === false && ci.checkins["punch"].day === relDay(1),
-  "昨天的记录不会冒充今天", JSON.stringify(ci.checkins["punch"]));
+ok(ci.checkins["punch-cards"].today === false && ci.checkins["punch-cards"].day === relDay(1),
+  "昨天的记录不会冒充今天", JSON.stringify(ci.checkins["punch-cards"]));
 
 // ---- 其余几种打卡：全部来自真实日志行的形状 ----
 const cap = (title, message, ts) =>
   store._captureCheckins({ ts, title, message, email: E });
 ok(cap("SEARCH-MANAGER", "Mobile: run (3/10, missing 7) | Desktop: run (24/30, missing 6)", "2026-10-12T01:20:00.000Z") === 1, "今日搜索进度取 Desktop");
 ok(cap("SEARCH-MANAGER", "Mobile: skip (complete, 0/0) | Desktop: skip (complete, 60/60)", "2026-10-12T01:20:01.000Z") === 1, "搜索跑满也记一行");
-ok(cap("REACT-PARSE", "Quest list | parents=3 | incomplete=1", "2026-10-12T01:20:02.000Z") === 1, "印章收集按组数算");
+ok(cap("REACT-PARSE", "Quest list | parents=3 | incomplete=1", "2026-10-12T01:20:02.000Z") === 1, "组数行写进 punch-cards");
 ok(cap("DAILY-SET", 'All "Daily Set" items have already been completed', "2026-10-12T01:20:03.000Z") === 1, "每日套装完成态");
 ok(cap("DAILY-CHECK-IN", "Daily Check-In completed but no points gained | type=103", "2026-10-12T01:20:04.000Z") === 1, "App 签到完成态");
 ok(cap("FLOW", "Starting session for someone", "2026-10-12T01:20:05.000Z") === 0, "不相关的 title 一行都不写");
@@ -224,7 +224,8 @@ ci = store.checkinSummary({ days: 90 })[E];
 const k = ci.checkins;
 ok(k["search-today"].days === 60 && k["search-today"].daysMax === 60 && k["search-today"].status === "complete",
   "搜索进度保留最新那条", JSON.stringify(k["search-today"]));
-ok(k["punch"].days === 2 && k["punch"].daysMax === 3, "印章 3 组里已完成 2 组", JSON.stringify(k["punch"]));
+ok(k["punch-cards"].days === 2 && k["punch-cards"].daysMax === 3, "组数口径：3 张卡里完成 2 张", JSON.stringify(k["punch-cards"]));
+ok(k["punch"] === undefined, "只有组数时不要伪造出 punch（界面会画成两枚印章）");
 ok(k["daily-set-today"].status === "complete" && k["app-checkin-today"].status === "complete", "两个完成态都记上了");
 ok(Object.keys(k).length === 5, `一共 5 种打卡：${Object.keys(k).join(", ")}`);
 
@@ -235,27 +236,38 @@ ok(
 );
 ci = store.checkinSummary({ days: 90 })[E];
 ok(ci.checkins["default-search"].days === 6, "dse 与打卡行共用同一个 kind，新值覆盖旧值", JSON.stringify(ci.checkins["default-search"]));
-ok(ci.checkins["level-dailyset"].days === 2 && ci.checkins["level-dailyset"].daysMax === 4, "每日活动天数", JSON.stringify(ci.checkins["level-dailyset"]));
-ok(ci.checkins["level-dailystreaks_mobile"].status === "progress", "App 签到进度", JSON.stringify(ci.checkins["level-dailystreaks_mobile"]));
+ok(ci.checkins["dailyset"].days === 2 && ci.checkins["dailyset"].daysMax === 4, "每日活动天数", JSON.stringify(ci.checkins["dailyset"]));
+ok(ci.checkins["dailystreaks_mobile"].status === "progress", "App 签到进度", JSON.stringify(ci.checkins["dailystreaks_mobile"]));
 ok(cap("CHECKIN-PROGRESS", "gamepass=true | puzzle=0/0 | broken=9/3", "2026-10-12T01:30:01.000Z") === 0, "没有分母/分母为 0/超过分母的行都不写");
 ok(Object.keys(store.checkinSummary({ days: 90 })[E].checkins).length === 7, "非法行没多出 kind，也没覆盖掉好数据");
 
-// 印章收集：页面里那句 "3 / 12 个任务" 才是用户看的进度，bot 打成 stamps=3/12；
-// 有了它就优先用它，别再报"0/2 组"那种没有信息量的口径。
+// 印章收集：页面里那句 "3 / 12 个任务" 才是用户看的进度，bot 打成 stamps=3/12。
+// 关键是两种口径不能再共用一个 kind —— 以前解析不到 stamps 时会把"2 张卡"写成
+// punch=0/2，界面就画出两个格子，看着像"总共只有两枚印章"。
 ok(
   cap("REACT-PARSE", "Quest list | parents=2 | incomplete=2 | stamps=3/12", "2026-10-12T01:25:00.000Z") === 1,
-  "带 stamps 的印章行也能捕获"
+  "带 stamps 的行写进 punch"
 );
 ci = store.checkinSummary({ days: 90 })[E];
 ok(
   ci.checkins["punch"].days === 3 && ci.checkins["punch"].daysMax === 12,
-  "印章进度改用 stamps=3/12，不再是 0/2 组",
+  "punch 是 n/12 那个口径",
   JSON.stringify(ci.checkins["punch"])
 );
-// 同一轮里后面的行没有 stamps（比如另一张卡的列表），也不能把已有的 3/12 覆盖成 0/2
-ok(cap("REACT-PARSE", "Quest list | parents=2 | incomplete=2", "2026-10-12T01:26:00.000Z") === 1, "无 stamps 时仍按组数写");
+ok(cap("REACT-PARSE", "Quest list | parents=2 | incomplete=2", "2026-10-12T01:26:00.000Z") === 1, "组数行仍写 punch-cards");
 ci = store.checkinSummary({ days: 90 })[E];
-ok(ci.checkins["punch"].days === 0 && ci.checkins["punch"].daysMax === 2, "后到的组数行按最新时间覆盖");
+ok(ci.checkins["punch"].days === 3 && ci.checkins["punch"].daysMax === 12, "组数行不能把真印章进度顶掉");
+ok(ci.checkins["punch-cards"].days === 0 && ci.checkins["punch-cards"].daysMax === 2, "组数单独记着");
+
+// bot 从页面 streak 卡里拿到的真·连续天数（partner 名字不可控，kind 里带 slug）
+ok(
+  cap("CHECKIN-PROGRESS", "streak-bing=3/14 | tasks-bing=2/4 | streak-cn-bing-com=1/7", "2026-10-12T01:35:00.000Z") === 3,
+  "streak-* / tasks-* 一行三种"
+);
+ci = store.checkinSummary({ days: 90 })[E];
+ok(ci.checkins["streak-bing"].days === 3 && ci.checkins["streak-bing"].daysMax === 14, "必应搜索连续天数", JSON.stringify(ci.checkins["streak-bing"]));
+ok(ci.checkins["tasks-bing"].daysMax === 4, "当天要做几个任务", JSON.stringify(ci.checkins["tasks-bing"]));
+ok(ci.checkins["streak-cn-bing-com"].days === 1, "partner 是网址时 slug 化后也能记");
 
 ok(store.checkinSummary({ days: 0 }).constructor === Object, "days 非法也不炸");
 
