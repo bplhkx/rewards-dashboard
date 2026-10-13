@@ -196,10 +196,12 @@ ok(
 );
 ci = store.checkinSummary({ days: 90 })[E];
 ok(ci.checkins["default-search"].days === 4, "被忽略的行不影响已记进度");
-// 昨天的记录要能被界面认出来（today=false），否则"今日已完成"会一直挂着昨天的状态
+// 昨天的记录要能被界面认出来（today=false），否则"今日已完成"会一直挂着昨天的状态。
+// 日期钉在 2026-10-12（下面所有打卡行都用这一天的 01:xx），时间取 00:05 —— 早于它们，
+// 这样"最新 ts 覆盖"才会按本段的书写顺序往前走；用 relAt(1) 会随挂钟时刻漂到 01:20 之后。
 ok(
   store._captureCheckins({
-    ts: relAt(1).toISOString(),
+    ts: "2026-10-12T00:05:00.000Z",
     title: "REACT-PARSE",
     message: "Quest list | parents=4 | incomplete=2",
     email: E,
@@ -207,7 +209,7 @@ ok(
   "写一条昨天的印章记录"
 );
 ci = store.checkinSummary({ days: 90 })[E];
-ok(ci.checkins["punch-cards"].today === false && ci.checkins["punch-cards"].day === relDay(1),
+ok(ci.checkins["punch-cards"].today === false && ci.checkins["punch-cards"].day === "2026-10-12",
   "昨天的记录不会冒充今天", JSON.stringify(ci.checkins["punch-cards"]));
 
 // ---- 其余几种打卡：全部来自真实日志行的形状 ----

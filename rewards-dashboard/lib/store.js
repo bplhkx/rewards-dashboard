@@ -424,8 +424,17 @@ class Store {
       allCheckinProgress: this.db.prepare(
         "SELECT email, kind, days, days_max, status, ts, user_name FROM checkin_progress ORDER BY email, kind",
       ),
-      emailByUserName: this.db.prepare(
-        "SELECT email FROM accounts WHERE user_name = ? AND email IS NOT NULL LIMIT 1",
+      // 日志行的 [user] 只有邮箱前缀，而多域账号的前缀会撞车
+      // （bplhkd@outlook.com 与 bplhkd@gmail.com 都是 bplhkd）。以前这里是
+      // `... LIMIT 1`，等于把两个账号的打卡进度全记到"扫到的第一行"那个邮箱上，
+      // 另一个账号在 App 里就永远显示"未记录"。现在一律取全部匹配，只在唯一时采信。
+      emailsByUserName: this.db.prepare(
+        "SELECT email FROM accounts WHERE lower(user_name) = lower(?) AND email IS NOT NULL",
+      ),
+      // 撞车时优先认"当前正在跑的那个"；开了多 cluster 并行时这里会返回多行，
+      // 调用方按"不唯一就不猜"处理。
+      runningEmailsByUserName: this.db.prepare(
+        "SELECT email FROM accounts WHERE lower(user_name) = lower(?) AND status = 'running' AND email IS NOT NULL",
       ),
 
       upsertAccountStart: this.db.prepare(`
@@ -1299,8 +1308,28 @@ class Store {
   }
 
   /**
+   * 决定一行进度日志该记到哪个邮箱名下。顺序：
+   * 1. 事件自带 email（ACCOUNT-* 那几类）；
+   * 2. [user] 位直接就是邮箱（新版 bot 打的是完整邮箱）；
+   * 3. 前缀唯一对应"正在跑"的那个账号；
+   * 4. 前缀在 accounts 里只匹配到一个邮箱；
+   * 5. 以上都不满足就返回 null —— 宁可这条不记账，也不要把它塞给同前缀的另一个账号。
+   * 第 3、4 步都要求"唯一"，所以开多 cluster 并行跑同前缀账号时会选择丢弃。
+   */
+  _checkinEmail(event) {
+    if (event.email) return event.email;
+    const name = String(event.userName || "").trim();
+    if (!name) return null;
+    if (name.includes("@")) return name.toLowerCase();
+    const running = this.stmts.runningEmailsByUserName.all(name);
+    if (running.length === 1) return running[0].email;
+    const all = this.stmts.emailsByUserName.all(name);
+    return all.length === 1 ? all[0].email : null;
+  }
+
+  /**
    * 按 CHECKIN_RULES 把一行日志里的进度摘进 checkin_progress。
-   * 这类行大多只带 userName（DESKTOP/MOBILE 会话的账号名），邮箱靠 accounts 表反查。
+   * 这类行大多只带 userName（DESKTOP/MOBILE 会话的账号名），邮箱要靠 _checkinEmail 反查。
    * @returns 写入了几条（同一行命中多条规则时可能 >1）
    */
   _captureCheckins(event) {
@@ -1324,9 +1353,7 @@ class Store {
         if (!kind || !Number.isFinite(days) || !Number.isFinite(daysMax) || daysMax <= 0 || days > daysMax) {
           continue;
         }
-        email ??=
-          event.email ||
-          (event.userName ? this.stmts.emailByUserName.get(event.userName)?.email ?? null : null);
+        email ??= this._checkinEmail(event);
         if (!email) continue;
         this.stmts.upsertCheckinProgress.run(
           email,
