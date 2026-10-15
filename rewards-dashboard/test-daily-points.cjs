@@ -271,6 +271,57 @@ ok(ci.checkins["streak-bing"].days === 3 && ci.checkins["streak-bing"].daysMax =
 ok(ci.checkins["tasks-bing"].daysMax === 4, "当天要做几个任务", JSON.stringify(ci.checkins["tasks-bing"]));
 ok(ci.checkins["streak-cn-bing-com"].days === 1, "partner 是网址时 slug 化后也能记");
 
+// ---- 跑完后的结算行是"本轮几分"，必须加在已存进度上，不能当总量 ----
+// 先把基线放回 0/60（上面那条 01:20:01 已经把它记成 60/60 了）
+cap("SEARCH-MANAGER", "Mobile: skip (complete, 0/0) | Desktop: run (0/60, missing 60)", "2026-10-12T01:39:00.000Z");
+const sum = (t) => cap("SEARCH-MANAGER", "Search summary | mobile=0 | desktop=33 | bonus=0 | total=33", t);
+ok(sum("2026-10-12T01:40:00.000Z") === 1, "结算行记一行（加在 0/60 上）");
+ci = store.checkinSummary({ days: 90 })[E];
+ok(ci.checkins["search-today"].days === 33 && ci.checkins["search-today"].daysMax === 60,
+  "0/60 + 本轮 33 分 = 33/60", JSON.stringify(ci.checkins["search-today"]));
+ok(ci.checkins["search-today"].status === "progress", "没跑满还是 progress");
+
+// 同一行被 SSE + 轮询投递两次，不能加第二次
+sum("2026-10-12T01:40:00.000Z");
+ci = store.checkinSummary({ days: 90 })[E];
+ok(ci.checkins["search-today"].days === 33, "同 ts 重复投递不重复加", JSON.stringify(ci.checkins["search-today"]));
+
+// 第二轮又拿到 27 分 → 跑满
+cap("SEARCH-MANAGER", "Search summary | mobile=0 | desktop=27 | bonus=0 | total=27", "2026-10-12T01:41:00.000Z");
+ci = store.checkinSummary({ days: 90 })[E];
+ok(ci.checkins["search-today"].days === 60 && ci.checkins["search-today"].status === "complete",
+  "第二轮的增量把额度加满", JSON.stringify(ci.checkins["search-today"]));
+
+// 已经跑满的账号，第二轮结算行是 0 分 —— 不能把 60/60 顶成 0/60
+cap("SEARCH-MANAGER", "Search summary | mobile=0 | desktop=0 | bonus=0 | total=0", "2026-10-12T01:42:00.000Z");
+ci = store.checkinSummary({ days: 90 })[E];
+ok(ci.checkins["search-today"].days === 60, "已跑满时 0 分结算行不会把进度打回 0");
+
+// 没见过计划行（没有基线和分母）就不写
+ok(
+  store._captureCheckins({
+    ts: "2026-10-12T01:43:00.000Z",
+    title: "SEARCH-MANAGER",
+    message: "Search summary | mobile=0 | desktop=5 | bonus=0 | total=5",
+    email: "nobase@outlook.com",
+  }) === 0,
+  "没有基线时不拿增量冒充总量"
+);
+
+// ---- 已经集满几轮：CHECKIN-CYCLES 是纯计数，没有分母 ----
+ok(
+  cap("CHECKIN-CYCLES", "dailyset=3 | dailystreaks_mobile=2 | dse=1", "2026-10-12T01:50:00.000Z") === 3,
+  "三种周期计数都收下"
+);
+ci = store.checkinSummary({ days: 90 })[E];
+ok(ci.checkins["cycles-dailyset"].days === 3 && ci.checkins["cycles-dailyset"].daysMax === 3,
+  "每日活动已集满 3 轮", JSON.stringify(ci.checkins["cycles-dailyset"]));
+ok(ci.checkins["cycles-default-search"].days === 1, "dse 的周期沿用 default-search 名字");
+ok(
+  cap("CHECKIN-CYCLES", "dailyset=abc | broken=-2", "2026-10-12T01:51:00.000Z") === 0,
+  "非数字/负数的周期不写"
+);
+
 ok(store.checkinSummary({ days: 0 }).constructor === Object, "days 非法也不炸");
 
 console.log(fails ? `\n${fails} 项失败` : "\n全部通过");

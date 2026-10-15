@@ -219,6 +219,27 @@ const CHECKIN_RULES = [
     },
   },
   {
+    title: 'SEARCH-MANAGER',
+    // 开跑前那行 "Desktop: run (0/60, missing 60)" 只是计划，跑完后真正的分数在结算行里：
+    //   "Search summary | mobile=0 | desktop=33 | bonus=0 | total=33"
+    // 只抓这一行的话界面会整天停在 0/60。bonus 是连胜奖励分，不算在 60 的额度里，所以不加。
+    // 这行没有分母，daysMax 给 null，由 _captureCheckins 沿用该账号上次记到的分母。
+    parse(message) {
+      const m = /Search summary \| mobile=(\d+) \| desktop=(\d+) \| bonus=(\d+)/.exec(message);
+      if (!m) return null;
+      // 这行是"本轮拿到几分"，不是"今天一共几分"：已经跑满的账号会打 0，
+      // 直接当进度写就会把 60/60 顶成 0/60。所以标成 cumulative，由 _captureCheckins
+      // 在已存的进度上加，并且只认严格更新的 ts（重复投递不会加两次）。
+      return {
+        kind: 'search-today',
+        days: Number(m[1]) + Number(m[2]),
+        daysMax: null,
+        status: null,
+        cumulative: true,
+      };
+    },
+  },
+  {
     title: 'CHECKIN-PROGRESS',
     // bot 把 level_info 里的 hva_* 天数成对拼在一行：
     //   "dse=3/14 | dailyset=2/4 | dailystreaks_mobile=5/7"
@@ -238,6 +259,28 @@ const CHECKIN_RULES = [
           days,
           daysMax,
           status: days >= daysMax ? "complete" : "progress",
+        });
+      }
+      return out;
+    },
+  },
+  {
+    title: 'CHECKIN-CYCLES',
+    // bot 把 level_info 里的 hva_<name>_completed_amount 打成一行的纯计数：
+    //   "dailyset=3 | dailystreaks_mobile=2 | dse=1"
+    // 意思是"这个升级活动已经完整集满过几轮"（也就是领到几次档位奖励）。
+    // 只有一个数、没有分母，所以 days=daysMax=N 存着，界面按文字显示，不画格子。
+    parse(message) {
+      const out = [];
+      for (const m of message.matchAll(/([a-z0-9_-]+)\s*=\s*(\d+)/gi)) {
+        const name = m[1].toLowerCase();
+        const n = Number(m[2]);
+        if (!Number.isFinite(n) || n < 0) continue;
+        out.push({
+          kind: `cycles-${name === "dse" ? "default-search" : name}`,
+          days: n,
+          daysMax: Math.max(n, 1),
+          status: "complete",
         });
       }
       return out;
@@ -418,8 +461,25 @@ class Store {
                     user_name = excluded.user_name
                 WHERE excluded.ts >= checkin_progress.ts
             `),
+      // 增量类日志行专用：只认**严格更新**的 ts，同一行被 SSE + 轮询投递两次也只会加一次
+      upsertCheckinProgressNewer: this.db.prepare(`
+                INSERT INTO checkin_progress (email, kind, days, days_max, status, ts, user_name)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(email, kind) DO UPDATE SET
+                    days = excluded.days,
+                    days_max = excluded.days_max,
+                    status = excluded.status,
+                    ts = excluded.ts,
+                    user_name = excluded.user_name
+                WHERE excluded.ts > checkin_progress.ts
+            `),
       checkinsByEmail: this.db.prepare(
         "SELECT kind, days, days_max, status, ts, user_name FROM checkin_progress WHERE email = ?",
+      ),
+      // 结算类日志行（Search summary）里没有分母，也只知道"本轮拿了几分"，
+      // 要把它当增量就得先读到已存的 days / days_max
+      checkinKindRow: this.db.prepare(
+        "SELECT days, days_max FROM checkin_progress WHERE email = ? AND kind = ?",
       ),
       allCheckinProgress: this.db.prepare(
         "SELECT email, kind, days, days_max, status, ts, user_name FROM checkin_progress ORDER BY email, kind",
@@ -1349,18 +1409,39 @@ class Store {
       // 一行可能带好几种进度（CHECKIN-PROGRESS），规则返回数组或单个对象
       const entries = Array.isArray(result) ? result : result ? [result] : [];
       for (const parsed of entries) {
-        const { kind, days, daysMax, status } = parsed || {};
-        if (!kind || !Number.isFinite(days) || !Number.isFinite(daysMax) || daysMax <= 0 || days > daysMax) {
-          continue;
-        }
+        let { kind, days, daysMax, status, cumulative } = parsed || {};
+        if (!kind || !Number.isFinite(days)) continue;
         email ??= this._checkinEmail(event);
         if (!email) continue;
+
+        if (cumulative) {
+          // 结算行只报"本轮几分"，加在已存的进度上才是今天的额度；
+          // 没有基线（还没见过计划行）就整条跳过，不拿增量冒充总量。
+          const prev = this.stmts.checkinKindRow.get(email, kind);
+          if (!prev || !Number.isFinite(prev.days_max) || prev.days_max <= 0) continue;
+          daysMax = prev.days_max;
+          days = Math.min(daysMax, (prev.days || 0) + days);
+          status = days >= daysMax ? "complete" : "progress";
+          this.stmts.upsertCheckinProgressNewer.run(
+            email, kind, Math.round(days), Math.round(daysMax), status, event.ts, event.userName || null,
+          );
+          written++;
+          continue;
+        }
+
+        if (daysMax === null || daysMax === undefined) {
+          // 结算行里没有分母，沿用这条账号上次记到的那个（比如搜索额度的 60）
+          daysMax = this.stmts.checkinKindRow.get(email, kind)?.days_max;
+        }
+        if (!Number.isFinite(daysMax) || daysMax <= 0 || days > daysMax) {
+          continue;
+        }
         this.stmts.upsertCheckinProgress.run(
           email,
           kind,
           Math.round(days),
           Math.round(daysMax),
-          status || "progress",
+          status || (days >= daysMax ? "complete" : "progress"),
           event.ts,
           event.userName || null,
         );
