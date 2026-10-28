@@ -16,6 +16,9 @@ A companion dashboard for [microsoft-rewards-script](https://github.com/thenetsk
 - **History** — parsed events stored in a local SQLite db so data survives restarts, independent of the bot's own in-memory log buffer
 - **Theme support** — Includes themes: Nord, Dracula, Catppuccin, Gruvbox, Tokyo Night, and more!
 - **Responsive** - Features a simplified mobile view
+- **Check-in progress** - the bot's `CHECKIN-PROGRESS`, `CHECKIN-CYCLES` and `SEARCH-MANAGER` lines are folded into a per-account, per-kind table (streak cards, punch-card stamps, completed cycles, today's search quota), so the native app and this dashboard agree on what "3 of 7" means
+- **Per-platform login reset** - each account card has **Reset login** with Mobile / Desktop / Both. Mobile and desktop are two independent logins in the bot's `sessions.db`, so a reset can drop only the broken one; the next run signs that platform in again with the account password
+- **Humanize controls** - the bot's split-the-day-into-several-sittings switches, search completion ratio, read-to-earn cap and quiet-hour windows are editable from the Config tab instead of by hand-editing JSON
 
 ## Quick start (Docker)
 
@@ -82,7 +85,7 @@ Two features are gated on the _API_ side, and are off by default:
 
 **Overview** - stat cards (accounts, combined balance, last run, accounts in error, next scheduled run), a live run panel with a progress bar and per-account rows while the bot is working, and a recent-activity feed.
 
-**Accounts** - every configured account, joined with what the logs actually observed: current balance, daily accumulation bars, today's gain, success/error state, current streak, streak protection status and remaining protection days, and a details drawer (slot, geo, language, TOTP, recovery email, proxy, lifetime collected). Accounts live in the bot's `.env`, so this tab reports on them rather than editing them.
+**Accounts** - every configured account, joined with what the logs actually observed: current balance, daily accumulation bars, today's gain, success/error state, current streak, streak protection status and remaining protection days, and a details drawer (slot, geo, language, TOTP, recovery email, proxy, lifetime collected). Accounts live in the bot's `.env`, so this tab reports on them rather than editing them. Each card also has **Run only**, **Reset login** (mobile / desktop / both) and a two-step **Delete** for the dashboard's own stored history.
 
 **Logs** - live log viewer over SSE. Level filter, text search, pause (buffers while paused), autoscroll, load-more, download, clear.
 
@@ -90,7 +93,7 @@ Two features are gated on the _API_ side, and are off by default:
 
 **Schedule** - the dashboard's own cron. Presets, a live-validated cron field with a plain-English description, account exclusions, missed-run recovery, "skip if already running", next/last run times and the last result. It's stored in the dashboard's database and fires a run by pressing Start on the API for you.
 
-**Config** - the bot's `config.json`. Quick toggles for the common booleans, plus a raw JSON editor. Saving sends a **PATCH of only the fields you changed**, never a full document - so the redacted webhook secrets in your view can't be written over the real ones. If you do edit a redacted field, the save is refused with an explanation. Validation errors from the bot's own validator come back inline.
+**Config** - the bot's `config.json`. Quick toggles for the common booleans, plus a raw JSON editor. Saving sends a **PATCH of only the fields you changed**, never a full document - so the redacted webhook secrets in your view can't be written over the real ones. If you do edit a redacted field, the save is refused with an explanation. Validation errors from the bot's own validator come back inline. Grouped quick controls cover the core toggles, worker switches, delays, webhooks and the **Humanize** run strategy (ratio, read-to-earn cap, quiet-hour windows).
 
 **Diagnostics** - the bot's error captures. Error text, screenshot, and the HTML dump, streamed through the dashboard.
 
@@ -107,6 +110,8 @@ Above the tabs, a control strip is always visible: **Start**, **Stop**, **Restar
 **Live points.** The bot prints its balance and every gain as it earns them, and the API folds those lines into a running tally (`GET /points`). So the Overview shows points climbing _during_ a run, not just the final total. When an account finishes, the live tally is replaced by the authoritative `ACCOUNT-END` numbers.
 
 **Separate authentication layers.** `CONTROL_API_TOKEN` is sent only from the dashboard to the Control API as a Bearer token and must match the API's `API_TOKEN`. Browser access uses the optional `DASHBOARD_USERNAME` and `DASHBOARD_PASSWORD` pair instead.
+
+**Front-end updates are visible immediately.** The service worker is network-first for same-origin files (cache is only the offline fallback) and its cache name is bumped whenever the bundle changes, so a redeploy of `views/*.js` or `style.css` shows up on the next reload instead of serving a stale cached copy.
 
 **No dependencies.** Charts are hand-rolled inline SVG (`public/charts.js`) that read their colors from CSS variables, so they follow the theme and work offline. The 14 themes from the original dashboard are untouched.
 

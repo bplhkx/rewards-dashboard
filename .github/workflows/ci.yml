@@ -1,0 +1,58 @@
+name: CI
+
+# The panel has no dependencies at all, so CI is just: does every file parse,
+# and do the two regression suites still pass. Both suites build a throwaway
+# SQLite db and feed it synthetic log lines, so nothing here touches a real
+# Control API or a real account.
+on:
+    push:
+        branches: ['main', 'master']
+    pull_request:
+    workflow_dispatch:
+
+concurrency:
+    group: ci-${{ github.event.pull_request.number || github.ref }}
+    cancel-in-progress: true
+
+permissions:
+    contents: read
+
+jobs:
+    test:
+        name: Parse check and regression suites
+        runs-on: ubuntu-latest
+        timeout-minutes: 10
+
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+
+            - name: Set up Node.js
+              # node:sqlite is used by lib/store.js, so 24 is the floor
+              uses: actions/setup-node@v4
+              with:
+                  node-version: 24
+
+            - name: Syntax check the server and libs (CommonJS)
+              run: |
+                  set -euo pipefail
+                  node --check rewards-dashboard/server.js
+                  for f in rewards-dashboard/lib/*.js; do
+                    node --check "$f"
+                  done
+
+            - name: Syntax check the frontend (ES modules)
+              run: |
+                  set -euo pipefail
+                  for f in rewards-dashboard/public/*.js rewards-dashboard/public/views/*.js; do
+                    cp "$f" /tmp/esm-check.mjs
+                    node --check /tmp/esm-check.mjs || { echo "parse failed: $f"; exit 1; }
+                  done
+
+            - name: Check-in attribution suite
+              run: node rewards-dashboard/test-checkin-attribution.cjs
+
+            - name: Daily points suite
+              # covers the per-run search-summary increments and the
+              # CHECKIN-CYCLES counters the native app renders
+              run: node rewards-dashboard/test-daily-points.cjs
