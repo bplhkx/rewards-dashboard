@@ -2152,6 +2152,58 @@ tbody tr:hover {
   flex: 1 1 auto;
 }
 
+/* humanize.quietHours editor: one row per window - day chips, then
+   start -> end, then remove. Chips are buttons rather than checkboxes so a
+   single tap saves the whole array like the other tag controls do. */
+.field-quiet {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+.quiet-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+}
+.quiet-days {
+  flex: 1 1 100%;
+}
+.quiet-day {
+  appearance: none;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-muted);
+  border-radius: 999px;
+  padding: 0.15rem 0.5rem;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+.quiet-day:hover {
+  background: var(--hover);
+}
+.quiet-day--on {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--text-inverse);
+  font-weight: 600;
+}
+.quiet-time {
+  width: 5.2rem;
+  font-family: var(--mono);
+}
+.quiet-dash {
+  color: var(--text-muted);
+}
+.cfg-pair-hint {
+  flex: 1 1 100%;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  margin: -0.2rem 0 0;
+}
+
 .cfg-tip {
   margin-bottom: 0.6rem;
 }

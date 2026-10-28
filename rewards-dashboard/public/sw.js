@@ -1,4 +1,8 @@
-const CACHE_NAME = 'rewards-dashboard-pwa-v1'
+// v2: same-origin assets switched to network-first below. v1 kept
+// cache-first, so a redeploy of /views/*.js or /style.css stayed invisible to
+// anyone who had the page open - the old bundle was served from the cache
+// until the whole cache name changed. Bumping it drops those stale entries.
+const CACHE_NAME = 'rewards-dashboard-pwa-v2'
 const ASSETS = [
   '/',
   '/index.html',
@@ -44,6 +48,26 @@ self.addEventListener('fetch', event => {
     return
   }
 
+  // Same-origin views/scripts/styles: always try the server first so a
+  // redeploy shows up on the next reload, and only fall back to the cached
+  // copy when the panel is unreachable (offline).
+  if (url.origin === self.location.origin) {
+    event.respondWith(
+      fetch(request)
+        .then(response => {
+          if (response && response.status === 200 && response.type !== 'opaque') {
+            const clone = response.clone()
+            caches.open(CACHE_NAME).then(cache => cache.put(request, clone))
+          }
+          return response
+        })
+        .catch(() => caches.match(request).then(cached => cached || caches.match('/index.html')))
+    )
+    return
+  }
+
+  // Cross-origin (the Chart.js CDN) stays cache-first: it never changes under
+  // the same URL, and the phone is often offline-ish.
   event.respondWith(
     caches.match(request).then(cached => {
       if (cached) return cached

@@ -216,6 +216,21 @@ const TOGGLE_GROUPS = [
       },
     },
   },
+  {
+    // V4-china only: everything in this group is inert while humanize.enabled
+    // is off, so the master switch leads it.
+    title: "Humanize",
+    fields: {
+      "humanize.enabled": {
+        label: "Humanize run strategy",
+        desc: "Master switch. Off (default) behaves exactly like upstream.",
+      },
+      "humanize.skipWhenCompletedToday": {
+        label: "Skip if already completed today",
+        desc: "Exit at start-up when logs/last-success.txt already says today - turns a second scheduled run into a safety net instead of a repeat.",
+      },
+    },
+  },
 ];
 
 const TOGGLE_META = {};
@@ -355,6 +370,40 @@ const FIELD_GROUPS = [
         desc: "Sources used to build the search query pool",
         placeholder: "e.g. google, rss.bbc",
         hint: "Valid: google, wikipedia, wikirandom, hackernews, reddit, local, or rss.<source> (e.g. rss.bbc, rss.googleNews).",
+      },
+    },
+  },
+  {
+    // The "run today's tasks in several sittings" controls. Only live while
+    // Humanize run strategy is on (see TOGGLE_GROUPS).
+    title: "Humanize",
+    fields: {
+      "humanize.searchTargetRatio": {
+        kind: "pair",
+        label: "Search completion ratio",
+        numeric: true,
+        min: 0,
+        max: 1,
+        step: 0.01,
+        placeholder: "0.85",
+        desc: "Each run targets a random fraction of what is still missing (mobile and desktop draw separately), so the rest is left for the next run. Reserved points round down to a multiple of 3 (one search = 3 points).",
+        rangeHint: "1.0 = always finish everything in one run.",
+      },
+      "humanize.readToEarnArticles": {
+        kind: "pair",
+        label: "Read-to-earn articles per run",
+        numeric: true,
+        min: 1,
+        step: 1,
+        placeholder: "7",
+        desc: "Random cap on how many Read-to-Earn articles a single run opens.",
+        rangeHint: "Fewer than the daily total leaves the remainder for the next run.",
+      },
+      "humanize.quietHours": {
+        kind: "quiet",
+        label: "Quiet hours",
+        desc: "Windows the bot will not work in. A run that reaches a window waits until it ends; a run starting inside one waits first. start > end crosses midnight.",
+        hint: "No day ticked = that window never applies.",
       },
     },
   },
@@ -653,6 +702,7 @@ function renderSettings() {
 
   bindToggleEvents(host);
   bindFieldEvents(host);
+  bindQuietEvents(host);
 }
 
 function bindToggleEvents(host) {
@@ -749,6 +799,72 @@ function delaySubFieldHtml(groupLabel, subLabel, sub) {
         </label>`;
 }
 
+function pairSubFieldHtml(groupLabel, subLabel, path, def) {
+  const value = getDeep(loaded, path);
+  return `
+        <label class="field field-item" title="${U.escapeAttr(fieldTooltip(path, def.desc))}">
+            <span class="hint-text">${U.escapeHtml(groupLabel)} \u2014 ${subLabel}</span>
+            <input class="input" type="number" data-path="${U.escapeAttr(path)}"
+                value="${U.escapeAttr(value == null ? "" : String(value))}"
+                placeholder="${U.escapeAttr(def.placeholder || "")}"
+                ${def.min != null ? `min="${def.min}"` : ""}
+                ${def.max != null ? `max="${def.max}"` : ""}
+                step="${def.step != null ? def.step : 1}">
+        </label>`;
+}
+
+function pairFieldHtml(path, def) {
+  return (
+    pairSubFieldHtml(def.label, "min", `${path}.min`, def) +
+    pairSubFieldHtml(def.label, "max", `${path}.max`, def) +
+    (def.rangeHint
+      ? `<p class="field-hint cfg-pair-hint">${U.escapeHtml(def.rangeHint)}</p>`
+      : "")
+  );
+}
+
+const QUIET_DAYS = [
+  "monday",
+  "tuesday",
+  "wednesday",
+  "thursday",
+  "friday",
+  "saturday",
+  "sunday",
+];
+
+function quietFieldHtml(path, def) {
+  const raw = getDeep(loaded, path);
+  const rules = Array.isArray(raw) ? raw : [];
+  const rows = rules
+    .map((rule, i) => {
+      const days = Array.isArray(rule?.days) ? rule.days : [];
+      return `
+        <div class="quiet-row" data-quiet-index="${i}">
+            <div class="tag-chips quiet-days">
+                ${QUIET_DAYS.map(
+                  (d) => `<button type="button" class="quiet-day${days.includes(d) ? " quiet-day--on" : ""}" data-quiet-day="${d}" data-quiet-index="${i}" title="${d}">${d.slice(0, 2)}</button>`,
+                ).join("")}
+            </div>
+            <input class="input quiet-time" type="text" inputmode="numeric" pattern="[0-2][0-9]:[0-5][0-9]"
+                data-quiet-time="start" data-quiet-index="${i}" value="${U.escapeAttr(rule?.start ?? "")}" placeholder="12:00" title="Start (HH:MM)">
+            <span class="quiet-dash" aria-hidden="true">\u2192</span>
+            <input class="input quiet-time" type="text" inputmode="numeric" pattern="[0-2][0-9]:[0-5][0-9]"
+                data-quiet-time="end" data-quiet-index="${i}" value="${U.escapeAttr(rule?.end ?? "")}" placeholder="14:30" title="End (HH:MM)">
+            <button type="button" class="btn btn-small btn-danger" data-quiet-remove="${i}">Remove</button>
+        </div>`;
+    })
+    .join("");
+
+  return `
+        <div class="field field-item field-quiet" data-quiet-path="${U.escapeAttr(path)}" title="${U.escapeAttr(fieldTooltip(path, def.desc))}">
+            <span class="hint-text">${U.escapeHtml(def.label)}</span>
+            ${rows || '<span class="empty-note">No quiet windows - the bot works around the clock.</span>'}
+            <div><button type="button" class="btn btn-small" data-quiet-add>+ Add window</button></div>
+            ${def.hint ? `<span class="field-hint">${U.escapeHtml(def.hint)}</span>` : ""}
+        </div>`;
+}
+
 function fieldHtml(path, def) {
   switch (def.kind) {
     case "text":
@@ -758,6 +874,10 @@ function fieldHtml(path, def) {
       return selectFieldHtml(path, def);
     case "tags":
       return tagsFieldHtml(path, def);
+    case "pair":
+      return pairFieldHtml(path, def);
+    case "quiet":
+      return quietFieldHtml(path, def);
     case "delay":
       return (
         delaySubFieldHtml(def.label, "min", def.min) +
@@ -1008,6 +1128,88 @@ function paint() {
   U.$("#cfgEditor", rootEl).value = JSON.stringify(loaded, null, 2);
   renderSettings();
   showNotice("cfgNotice", "");
+}
+
+// ---------- quietHours editor (humanize.quietHours) ----------
+//
+// The only array-of-objects setting in the config, so it gets its own small
+// editor instead of a text input: day chips + two HH:MM fields per window.
+// Every edit writes the whole array back through the same PATCH /config path
+// the other fields use (server deep-merges, zod validates).
+
+function quietRules(path) {
+  const raw = getDeep(loaded, path);
+  if (!Array.isArray(raw)) return [];
+  return raw.map((rule) => ({
+    days: Array.isArray(rule?.days) ? rule.days.slice() : [],
+    start: String(rule?.start ?? ""),
+    end: String(rule?.end ?? ""),
+  }));
+}
+
+async function saveQuiet(path, rules, description) {
+  try {
+    await save(nest(path, rules), description);
+    afterSave(nest(path, rules));
+  } catch {
+    // save() already surfaced the reason (and afterSave() rolled nothing back
+    // because the server rejected the patch, so `loaded` still matches disk)
+  }
+}
+
+function bindQuietEvents(host) {
+  host.querySelectorAll(".field-quiet").forEach((box) => {
+    const path = box.dataset.quietPath;
+    if (!path) return;
+
+    box.addEventListener("click", async (ev) => {
+      const target = ev.target;
+      if (!(target instanceof HTMLElement)) return;
+      const dayBtn = target.closest("[data-quiet-day]");
+      const removeBtn = target.closest("[data-quiet-remove]");
+      const addBtn = target.closest("[data-quiet-add]");
+      if (!dayBtn && !removeBtn && !addBtn) return;
+      const rules = quietRules(path);
+
+      if (dayBtn) {
+        const i = Number(dayBtn.dataset.quietIndex);
+        const day = dayBtn.dataset.quietDay;
+        if (!rules[i]) return;
+        const picked = new Set(rules[i].days);
+        picked.has(day) ? picked.delete(day) : picked.add(day);
+        // keep Monday..Sunday order so the stored array stays stable
+        rules[i].days = QUIET_DAYS.filter((d) => picked.has(d));
+        await saveQuiet(path, rules, `${day} → ${rules[i].days.length ? "quiet" : "working"}`);
+        return;
+      }
+      if (removeBtn) {
+        const i = Number(removeBtn.dataset.quietRemove);
+        if (!rules[i]) return;
+        rules.splice(i, 1);
+        await saveQuiet(path, rules, "removed a quiet window");
+        return;
+      }
+      rules.push({ days: QUIET_DAYS.slice(), start: "12:00", end: "14:30" });
+      await saveQuiet(path, rules, "added a quiet window");
+    });
+
+    box.querySelectorAll("input[data-quiet-time]").forEach((input) => {
+      input.addEventListener("change", async () => {
+        const i = Number(input.dataset.quietIndex);
+        const field = input.dataset.quietTime;
+        const value = input.value.trim();
+        const rules = quietRules(path);
+        if (!rules[i]) return;
+        if (!/^([01]?\d|2[0-3]):[0-5]\d$/.test(value)) {
+          U.toast("Times must be HH:MM on a 24-hour clock.", "error");
+          input.value = rules[i][field] ?? "";
+          return;
+        }
+        rules[i][field] = value;
+        await saveQuiet(path, rules, `quiet window ${field} → ${value}`);
+      });
+    });
+  });
 }
 
 export default {
