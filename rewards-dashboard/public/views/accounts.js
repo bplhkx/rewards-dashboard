@@ -17,6 +17,12 @@ let batchRunning = false;
 const deleteArmed = new Set();
 const deleting = new Set();
 
+// "Reset login" is armed the same way as delete, but its second step asks which
+// platform to drop: mobile and desktop are two independent logins in the bot's
+// sessions.db, and resetting the healthy one would force a needless re-login.
+const loginResetArmed = new Set();
+const loginResetting = new Set();
+
 const SOURCE_LABELS = {
   search: "Search",
   bonus: "Bonus search",
@@ -84,6 +90,40 @@ async function deleteAccount(account) {
     context.toast(error.message, error.status === 409 ? "warn" : "error");
   } finally {
     deleting.delete(account.key);
+    render(rootEl);
+  }
+}
+
+async function resetLogin(account, platform) {
+  if (!context || !account.configured) return;
+
+  const scope = platform === "both" ? "the mobile and the desktop" : `the ${platform}`;
+  const confirmed = window.confirm(
+    `Discard ${scope} stored login for ${account.email}?\n\nNothing is claimed or searched by this. The next run simply will not find cookies for that platform, so it signs in again with the account password and stores a fresh session.`,
+  );
+  if (!confirmed) {
+    loginResetArmed.delete(account.key);
+    render(rootEl);
+    return;
+  }
+
+  loginResetArmed.delete(account.key);
+  loginResetting.add(account.key);
+  render(rootEl);
+  try {
+    const result = await context.api.clearSession(account.email, platform);
+    const removed = Array.isArray(result?.platforms) ? result.platforms.join(", ") : platform;
+    const left =
+      Array.isArray(result?.remaining) && result.remaining.length
+        ? ` still signed in: ${result.remaining.join(", ")}`
+        : "";
+    context.toast(`Reset login for ${account.email} (${removed})${left}.`, "success");
+    context.invalidate();
+    await context.refresh();
+  } catch (error) {
+    context.toast(error.message, error.status === 409 ? "warn" : "error");
+  } finally {
+    loginResetting.delete(account.key);
     render(rootEl);
   }
 }
@@ -345,6 +385,20 @@ function renderAccountPanel(a, live) {
       </span>`
     : `<button type="button" class="btn btn-danger btn-small" data-arm-delete="${U.escapeAttr(a.key)}" ${deleteBlocked ? "disabled" : ""} title="${deleteBlocked ? "The account must be idle to delete it" : "Remove this account and its history from the dashboard"}">Delete</button>`;
 
+  // Reuses the armed-delete class so the platform buttons line up with the existing
+  // two-step styling; nothing in this group removes dashboard data.
+  const resetBlocked = !usable || running || a.status === "running" || deleting.has(a.key);
+  const loginResetButton = !a.configured
+    ? ""
+    : loginResetArmed.has(a.key)
+      ? `<span class="acc-delete-confirm">
+          <button type="button" class="btn btn-small" data-reset-platform="mobile" data-reset-key="${U.escapeAttr(a.key)}" ${loginResetting.has(a.key) ? "disabled" : ""} title="Drop only this account's mobile login">Mobile</button>
+          <button type="button" class="btn btn-small" data-reset-platform="desktop" data-reset-key="${U.escapeAttr(a.key)}" ${loginResetting.has(a.key) ? "disabled" : ""} title="Drop only this account's desktop login">Desktop</button>
+          <button type="button" class="btn btn-danger btn-small" data-reset-platform="both" data-reset-key="${U.escapeAttr(a.key)}" ${loginResetting.has(a.key) ? "disabled" : ""} title="Drop both logins for this account">Both</button>
+          <button type="button" class="btn btn-small" data-cancel-login-reset="${U.escapeAttr(a.key)}">Cancel</button>
+        </span>`
+      : `<button type="button" class="btn btn-small" data-arm-login-reset="${U.escapeAttr(a.key)}" ${resetBlocked ? "disabled" : ""} title="${resetBlocked ? "Wait for the run to finish first" : "Forget the stored cookies so the next run logs in again with the account password"}">${loginResetting.has(a.key) ? "Resetting\u2026" : "Reset login"}</button>`;
+
   const chips = [
     protection
       ? `<span class="pill ${protection.pillClass}" title="${U.escapeAttr(protection.streak)}; streak protection is ${protection.state.toLowerCase()}; ${U.escapeAttr(protection.days)}">Protection ${protection.state} \u00b7 ${a.streakProtectionRemainingDays == null ? "days unavailable" : `${a.streakProtectionRemainingDays} day${a.streakProtectionRemainingDays === 1 ? "" : "s"} left`}</span>`
@@ -368,6 +422,7 @@ function renderAccountPanel(a, live) {
                 <span class="acc-status-pill">${U.statusPill(statusKey)}</span>
                 ${selectCheckbox}
                 ${runButton}
+                ${loginResetButton}
                 ${deleteButton}
             </span>
         </div>
@@ -451,6 +506,27 @@ function render(root) {
       const key = btn.dataset.confirmDelete;
       const account = accounts.find((a) => a.key === key);
       if (account) deleteAccount(account);
+    }),
+  );
+
+  container.querySelectorAll("button[data-arm-login-reset]").forEach((btn) =>
+    btn.addEventListener("click", () => {
+      loginResetArmed.add(btn.dataset.armLoginReset);
+      render(root);
+    }),
+  );
+
+  container.querySelectorAll("button[data-cancel-login-reset]").forEach((btn) =>
+    btn.addEventListener("click", () => {
+      loginResetArmed.delete(btn.dataset.cancelLoginReset);
+      render(root);
+    }),
+  );
+
+  container.querySelectorAll("button[data-reset-platform]").forEach((btn) =>
+    btn.addEventListener("click", () => {
+      const account = accounts.find((a) => a.key === btn.dataset.resetKey);
+      if (account) resetLogin(account, btn.dataset.resetPlatform);
     }),
   );
 

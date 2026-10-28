@@ -69,8 +69,13 @@ export const api = {
     `/api/diagnostics/${encodeURIComponent(name)}/${encodeURIComponent(file)}`,
 
   sessions: () => call("GET", "/api/sessions"),
-  clearSession: (email) =>
-    call("DELETE", `/api/sessions/${encodeURIComponent(email)}`),
+  // platform: "mobile" | "desktop" | "both" - the bot stores one login per platform,
+  // so a reset can be scoped to the platform that actually went stale.
+  clearSession: (email, platform = "both") =>
+    call(
+      "DELETE",
+      `/api/sessions/${encodeURIComponent(email)}?platform=${encodeURIComponent(platform)}`,
+    ),
   deleteDashboardAccount: (email) =>
     call("DELETE", `/api/dashboard-accounts/${encodeURIComponent(email)}`),
 

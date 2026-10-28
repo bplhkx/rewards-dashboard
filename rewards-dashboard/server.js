@@ -698,7 +698,13 @@ async function handleApi(req, res, url) {
   if (pathname.startsWith("/api/sessions/") && method === "DELETE") {
     const email = pathname.slice("/api/sessions/".length);
     if (!email) return sendJson(res, 400, { error: "Missing account email" });
-    return forward(res, "DELETE", `/sessions/${email}`);
+    // mobile and desktop are two separate logins; a reset can be scoped to one of them.
+    // Anything else is forwarded as-is so the bot stays the single place that decides.
+    const platform = (searchParams.get("platform") || "both").toLowerCase();
+    if (!["mobile", "desktop", "both"].includes(platform)) {
+      return sendJson(res, 400, { error: "platform must be mobile, desktop or both" });
+    }
+    return forward(res, "DELETE", `/sessions/${email}?platform=${platform}`);
   }
 
   // dashboard-local account data (separate from the bot's own accounts/
